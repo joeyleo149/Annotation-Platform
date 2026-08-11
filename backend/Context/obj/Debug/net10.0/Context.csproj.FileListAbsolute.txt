@@ -1,0 +1,12 @@
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\bin\Debug\net10.0\Context.deps.json
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\bin\Debug\net10.0\Context.dll
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\bin\Debug\net10.0\Context.pdb
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\Context.csproj.AssemblyReference.cache
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\Context.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\Context.AssemblyInfoInputs.cache
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\Context.AssemblyInfo.cs
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\Context.csproj.CoreCompileInputs.cache
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\Context.dll
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\refint\Context.dll
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\Context.pdb
+C:\Users\Dell\OneDrive\Desktop\GUC\Internship\C-DRiVeS Lab\Annotator Website\KitScenesAnnotation\backend\Context\obj\Debug\net10.0\ref\Context.dll
