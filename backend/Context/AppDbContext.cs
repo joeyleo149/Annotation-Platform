@@ -31,12 +31,53 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasIndex(x => x.Email).IsUnique();
         });
         modelBuilder.Entity<Video>(entity =>
-        {
-            entity.Property(x => x.FileName).HasMaxLength(260);
-            entity.Property(x => x.StoragePath).HasMaxLength(2048);
-            entity.HasOne(x => x.UploadedByAdmin).WithMany(x => x.UploadedVideos)
-                .HasForeignKey(x => x.UploadedByAdminId).OnDelete(DeleteBehavior.Restrict);
-        });
+{
+    entity.Property(x => x.ScenarioId)
+        .HasMaxLength(100);
+
+    entity.Property(x => x.FileName)
+        .HasMaxLength(260);
+
+    entity.Property(x => x.StoragePath)
+        .HasMaxLength(2048);
+
+    entity.Property(x => x.MimeType)
+        .HasMaxLength(100);
+
+    entity.Property(x => x.ThumbnailPath)
+        .HasMaxLength(2048);
+
+    entity.Property(x => x.ProcessingStatus)
+        .HasMaxLength(50);
+
+    entity.Property(x => x.ProcessingError)
+        .HasColumnType("nvarchar(max)");
+
+    entity.Property(x => x.ScenarioType)
+        .HasMaxLength(200);
+
+    entity.Property(x => x.DrivingInstruction)
+        .HasColumnType("nvarchar(max)");
+
+    entity.Property(x => x.TrajectoryJson)
+        .HasColumnType("nvarchar(max)");
+
+    entity.Property(x => x.ActionsJson)
+        .HasColumnType("nvarchar(max)");
+
+    entity.Property(x => x.OriginalReasoningJson)
+        .HasColumnType("nvarchar(max)");
+
+    entity.HasIndex(x => x.FileName)
+        .IsUnique();
+
+    entity.HasIndex(x => x.ScenarioId);
+
+    entity.HasOne(x => x.UploadedByAdmin)
+        .WithMany(x => x.UploadedVideos)
+        .HasForeignKey(x => x.UploadedByAdminId)
+        .OnDelete(DeleteBehavior.Restrict);
+});
         modelBuilder.Entity<AnnotationSession>(entity =>
         {
             entity.HasOne(x => x.Annotator).WithMany(x => x.AnnotationSessions).HasForeignKey(x => x.AnnotatorId);
