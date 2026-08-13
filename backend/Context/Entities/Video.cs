@@ -3,6 +3,9 @@ namespace Context.Entities;
 public sealed class Video
 {
     public int Id { get; set; }
+    // Parent dataset
+    public int? DatasetId { get; set; }
+    public Dataset? Dataset { get; set; }
 
     // KITScenes identification
     public string? ScenarioId { get; set; }
@@ -32,7 +35,10 @@ public sealed class Video
     public string? TrajectoryJson { get; set; }
     public string? ActionsJson { get; set; }
     public string? OriginalReasoningJson { get; set; }
-
+    // Annotation quota and archive state
+    public int RequiredAnnotationCount { get; set; } = 1;
+    public bool IsArchived { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
     // Upload ownership
     public int UploadedByAdminId { get; set; }
     public DateTimeOffset UploadedAt { get; set; }
