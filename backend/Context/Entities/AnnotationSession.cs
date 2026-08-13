@@ -5,6 +5,9 @@ public sealed class AnnotationSession
     public int Id { get; set; }
     public int AnnotatorId { get; set; }
     public int VideoId { get; set; }
+
+    public SessionStatus Status { get; set; }
+    
     public DateTimeOffset AssignedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 

@@ -1,0 +1,1 @@
+public enum SessionStatus { Assigned, InProgress, Completed }

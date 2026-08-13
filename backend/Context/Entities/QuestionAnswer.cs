@@ -2,6 +2,7 @@ namespace Context.Entities;
 
 public sealed class QuestionAnswer
 {
+    public int Id { get; set; }
     public int SegmentResponseId { get; set; }
     public int QuestionNumber { get; set; }
     public required string Answer { get; set; }
