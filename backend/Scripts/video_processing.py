@@ -1,8 +1,10 @@
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
+import uuid
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -11,8 +13,8 @@ from typing import Any
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Extract video metadata with ffprobe and generate "
-            "a JPG thumbnail with ffmpeg."
+            "Normalize a video to browser-compatible H.264 MP4, "
+            "extract metadata, and generate a JPG thumbnail."
         )
     )
 
@@ -20,7 +22,7 @@ def parse_arguments() -> argparse.Namespace:
         "--input",
         required=True,
         type=Path,
-        help="Path to the input video file.",
+        help="Path to the uploaded video file.",
     )
 
     parser.add_argument(
@@ -51,7 +53,9 @@ def find_required_program(program_name: str) -> str:
     return program_path
 
 
-def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: list[str],
+) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         command,
         capture_output=True,
@@ -66,13 +70,64 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
 
         if not error_message:
             error_message = (
-                f"The command failed with exit code "
+                "The command failed with exit code "
                 f"{result.returncode}."
             )
 
         raise RuntimeError(error_message)
 
     return result
+
+
+def normalize_for_browser(
+    video_path: Path,
+    ffmpeg_path: str,
+) -> None:
+    temporary_path = video_path.with_name(
+        f".{video_path.stem}.{uuid.uuid4().hex}.browser.mp4"
+    )
+
+    command = [
+        ffmpeg_path,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        str(video_path),
+        "-map",
+        "0:v:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "20",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-an",
+        "-f",
+        "mp4",
+        str(temporary_path),
+    ]
+
+    try:
+        run_command(command)
+
+        if (
+            not temporary_path.exists()
+            or temporary_path.stat().st_size == 0
+        ):
+            raise RuntimeError(
+                "FFmpeg did not create a valid H.264 video."
+            )
+
+        os.replace(temporary_path, video_path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
 
 
 def parse_frame_rate(raw_frame_rate: str | None) -> float:
@@ -97,9 +152,8 @@ def extract_metadata(
         "v:0",
         "-show_entries",
         (
-            "stream=width,height,codec_name,"
-            "avg_frame_rate,r_frame_rate:"
-            "format=duration"
+            "stream=width,height,codec_name,pix_fmt,"
+            "avg_frame_rate,r_frame_rate:format=duration"
         ),
         "-of",
         "json",
@@ -125,10 +179,8 @@ def extract_metadata(
     video_stream = streams[0]
     format_data = probe_data.get("format", {})
 
-    raw_duration = format_data.get("duration")
-
     try:
-        duration_seconds = float(raw_duration)
+        duration_seconds = float(format_data.get("duration"))
     except (TypeError, ValueError):
         duration_seconds = 0.0
 
@@ -138,10 +190,10 @@ def extract_metadata(
     )
 
     frame_rate = parse_frame_rate(raw_frame_rate)
-
     width = int(video_stream.get("width", 0))
     height = int(video_stream.get("height", 0))
     codec = video_stream.get("codec_name", "unknown")
+    pixel_format = video_stream.get("pix_fmt", "unknown")
 
     if duration_seconds <= 0:
         raise RuntimeError(
@@ -153,12 +205,18 @@ def extract_metadata(
             "The video resolution could not be determined."
         )
 
+    if codec != "h264" or pixel_format != "yuv420p":
+        raise RuntimeError(
+            "The normalized video is not browser-compatible."
+        )
+
     return {
         "durationSeconds": round(duration_seconds, 3),
         "frameRate": round(frame_rate, 3),
         "width": width,
         "height": height,
         "codec": codec,
+        "pixelFormat": pixel_format,
     }
 
 
@@ -232,6 +290,8 @@ def process_video(
     ffprobe_path = find_required_program("ffprobe")
     ffmpeg_path = find_required_program("ffmpeg")
 
+    normalize_for_browser(video_path, ffmpeg_path)
+
     metadata = extract_metadata(
         video_path,
         ffprobe_path,
@@ -264,15 +324,8 @@ def main() -> int:
             thumbnail_width=arguments.thumbnail_width,
         )
 
-        print(
-            json.dumps(
-                result,
-                ensure_ascii=False,
-            )
-        )
-
+        print(json.dumps(result, ensure_ascii=False))
         return 0
-
     except Exception as exception:
         error_result = {
             "success": False,
@@ -280,10 +333,7 @@ def main() -> int:
         }
 
         print(
-            json.dumps(
-                error_result,
-                ensure_ascii=False,
-            ),
+            json.dumps(error_result, ensure_ascii=False),
             file=sys.stderr,
         )
 

@@ -20,37 +20,32 @@ public sealed class AssignmentExpirationWorker(
                 "AssignmentProcessing:CheckIntervalSeconds",
                 60);
 
-        var assignmentDurationMinutes =
+        var reassignmentDurationDays =
             configuration.GetValue<int>(
-                "AssignmentProcessing:" +
-                "DefaultAssignmentDurationMinutes",
-                30);
+                "AssignmentProcessing:DefaultAssignmentDurationDays",
+                1);
 
-        intervalSeconds =
-            Math.Max(10, intervalSeconds);
+        intervalSeconds = Math.Max(10, intervalSeconds);
 
-        assignmentDurationMinutes =
-            Math.Clamp(
-                assignmentDurationMinutes,
-                1,
-                1440);
+        reassignmentDurationDays = Math.Clamp(
+            reassignmentDurationDays,
+            1,
+            365);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                using var scope =
-                    scopeFactory.CreateScope();
+                using var scope = scopeFactory.CreateScope();
 
                 var assignmentService =
-                    scope.ServiceProvider
-                        .GetRequiredService<
-                            AnnotationAssignmentService>();
+                    scope.ServiceProvider.GetRequiredService<
+                        AnnotationAssignmentService>();
 
                 var result =
                     await assignmentService
                         .ProcessExpiredAssignmentsAsync(
-                            assignmentDurationMinutes,
+                            reassignmentDurationDays,
                             stoppingToken);
 
                 if (result.ExpiredSessionCount > 0)

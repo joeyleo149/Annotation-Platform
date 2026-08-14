@@ -279,6 +279,121 @@ public sealed class VideoService(AppDbContext context)
             totalDurationSeconds,
             annotatedSeconds / 3600);
     }
+
+    public async Task<VideoDeletionOutcome> DeletePermanentlyAsync(
+        int videoId,
+        CancellationToken cancellationToken = default)
+    {
+        var video = await context.Videos
+            .AsNoTracking()
+            .Where(item => item.Id == videoId)
+            .Select(item => new
+            {
+                item.Id,
+                item.FileName,
+                item.StoragePath,
+                item.ThumbnailPath
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (video is null)
+        {
+            return new VideoDeletionOutcome(
+                false, false,
+                $"Video {videoId} does not exist.",
+                videoId, 0, 0, 0, 0, false, false);
+        }
+
+        var sessionIds = await context.AnnotationSessions
+            .Where(session => session.VideoId == videoId)
+            .Select(session => session.Id)
+            .ToListAsync(cancellationToken);
+
+        var segmentIds = sessionIds.Count == 0
+            ? []
+            : await context.SegmentResponses
+                .Where(response =>
+                    sessionIds.Contains(response.AnnotationSessionId))
+                .Select(response => response.Id)
+                .ToListAsync(cancellationToken);
+
+        await using var transaction =
+            await context.Database.BeginTransactionAsync(
+                cancellationToken);
+
+        var deletedQuestionAnswers = segmentIds.Count == 0
+            ? 0
+            : await context.QuestionAnswers
+                .Where(answer =>
+                    segmentIds.Contains(answer.SegmentResponseId))
+                .ExecuteDeleteAsync(cancellationToken);
+
+        var deletedSegmentResponses = sessionIds.Count == 0
+            ? 0
+            : await context.SegmentResponses
+                .Where(response =>
+                    sessionIds.Contains(response.AnnotationSessionId))
+                .ExecuteDeleteAsync(cancellationToken);
+
+        var deletedTaskRequests = sessionIds.Count == 0
+            ? 0
+            : await context.AnnotationTaskRequests
+                .Where(request =>
+                    request.AnnotationSessionId.HasValue &&
+                    sessionIds.Contains(
+                        request.AnnotationSessionId.Value))
+                .ExecuteDeleteAsync(cancellationToken);
+
+        var deletedSessions = await context.AnnotationSessions
+            .Where(session => session.VideoId == videoId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.Videos
+            .Where(item => item.Id == videoId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        var videoFileDeleted = TryDeleteFile(video.StoragePath);
+        var thumbnailDeleted = TryDeleteFile(video.ThumbnailPath);
+        var filesDeleted = videoFileDeleted && thumbnailDeleted;
+
+        return new VideoDeletionOutcome(
+            true,
+            true,
+            filesDeleted
+                ? $"{video.FileName} and all related data were permanently deleted."
+                : $"{video.FileName} was removed from the database, but one or more stored files could not be deleted.",
+            videoId,
+            deletedSessions,
+            deletedSegmentResponses,
+            deletedQuestionAnswers,
+            deletedTaskRequests,
+            videoFileDeleted,
+            thumbnailDeleted);
+    }
+
+    private static bool TryDeleteFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return true;
+        }
+
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 }
 
 public sealed record VideoCatalogItem(
@@ -331,3 +446,15 @@ public sealed record DatasetMetrics(
     int RemainingAnnotations,
     double TotalDurationSeconds,
     double TotalHoursAnnotated);
+
+public sealed record VideoDeletionOutcome(
+    bool Found,
+    bool Deleted,
+    string Message,
+    int VideoId,
+    int DeletedSessionCount,
+    int DeletedSegmentResponseCount,
+    int DeletedQuestionAnswerCount,
+    int DeletedTaskRequestCount,
+    bool VideoFileDeleted,
+    bool ThumbnailDeleted);

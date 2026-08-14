@@ -12,29 +12,14 @@ public static class AnnotationSessionEndpoints
             .MapGroup("/api/annotation-sessions")
             .WithTags("Annotation Sessions");
 
-        group.MapGet(
-            "/",
-            GetSessionsAsync);
-
-        group.MapGet(
-            "/{id:int}",
-            GetSessionAsync);
-
-        group.MapGet(
-            "/requests",
-            GetRequestsAsync);
-
-        group.MapPost(
-            "/requests",
-            CreateRequestAsync);
-
+        group.MapGet("/", GetSessionsAsync);
+        group.MapGet("/{id:int}", GetSessionAsync);
+        group.MapGet("/requests", GetRequestsAsync);
+        group.MapPost("/requests", CreateRequestAsync);
         group.MapDelete(
             "/requests/{requestId:int}",
             CancelRequestAsync);
-
-        group.MapPost(
-            "/assign-next",
-            AssignNextAsync);
+        group.MapPost("/assign-next", AssignNextAsync);
         group.MapPost(
             "/process-expired",
             ProcessExpiredAsync);
@@ -160,7 +145,7 @@ public static class AnnotationSessionEndpoints
             var outcome =
                 await assignmentService.AssignNextAsync(
                     request.DatasetId,
-                    request.AssignmentDurationMinutes,
+                    request.AssignmentDurationDays,
                     cancellationToken);
 
             return outcome.Assigned
@@ -189,36 +174,36 @@ public static class AnnotationSessionEndpoints
             });
         }
     }
-private static async Task<IResult> ProcessExpiredAsync(
-    AnnotationAssignmentService assignmentService,
-    IConfiguration configuration,
-    CancellationToken cancellationToken)
-{
-    var durationMinutes =
-        configuration.GetValue<int>(
-            "AssignmentProcessing:" +
-            "DefaultAssignmentDurationMinutes",
-            30);
 
-    try
+    private static async Task<IResult> ProcessExpiredAsync(
+        AnnotationAssignmentService assignmentService,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
     {
-        var result =
-            await assignmentService
-                .ProcessExpiredAssignmentsAsync(
-                    durationMinutes,
-                    cancellationToken);
+        var reassignmentDurationDays =
+            configuration.GetValue<int>(
+                "AssignmentProcessing:" +
+                "DefaultAssignmentDurationDays",
+                1);
 
-        return Results.Ok(result);
-    }
-    catch (ArgumentException exception)
-    {
-        return Results.BadRequest(new
+        try
         {
-            message = exception.Message
-        });
-    }
-}
+            var result =
+                await assignmentService
+                    .ProcessExpiredAssignmentsAsync(
+                        reassignmentDurationDays,
+                        cancellationToken);
 
+            return Results.Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(new
+            {
+                message = exception.Message
+            });
+        }
+    }
 }
 
 public sealed record CreateTaskRequest(
@@ -227,4 +212,4 @@ public sealed record CreateTaskRequest(
 
 public sealed record AssignNextRequest(
     int DatasetId,
-    int AssignmentDurationMinutes);
+    int AssignmentDurationDays);

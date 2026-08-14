@@ -37,6 +37,10 @@ public sealed class VideoUploadService(AppDbContext context)
 
         var extension = Path.GetExtension(safeFileName);
 
+        var storedFileName = Path.ChangeExtension(
+            safeFileName,
+            ".mp4");
+
         ValidateFileType(
             extension,
             command.ContentType);
@@ -79,13 +83,13 @@ public sealed class VideoUploadService(AppDbContext context)
         var duplicateExists = await context.Videos.AnyAsync(
             video =>
             video.DatasetId == command.DatasetId &&
-            video.FileName == safeFileName,
+            video.FileName == storedFileName,
             cancellationToken);
 
         if (duplicateExists)
         {
             throw new VideoUploadConflictException(
-                $"A video named '{safeFileName}' is already registered.");
+                $"A video named '{storedFileName}' is already registered.");
         }
 
         var manifestMatch = await FindManifestScenarioAsync(
@@ -98,13 +102,13 @@ public sealed class VideoUploadService(AppDbContext context)
 
         var finalVideoPath = Path.Combine(
             command.VideoDirectory,
-            safeFileName);
+            storedFileName);
 
         var temporaryVideoPath =
             finalVideoPath + "." + Guid.NewGuid() + ".uploading";
 
         var thumbnailFileName =
-            Path.GetFileNameWithoutExtension(safeFileName) + ".jpg";
+            Path.GetFileNameWithoutExtension(storedFileName) + ".jpg";
 
         var thumbnailPath = Path.Combine(
             command.ThumbnailDirectory,
@@ -143,10 +147,10 @@ public sealed class VideoUploadService(AppDbContext context)
             {
                 ScenarioId = manifestMatch.ScenarioId,
                 DatasetRowIndex = manifestMatch.DatasetRowIndex,
-                FileName = safeFileName,
+                FileName = storedFileName,
                 StoragePath = finalVideoPath,
-                MimeType = NormalizeMimeType(extension),
-                FileSizeBytes = command.FileSizeBytes,
+                MimeType = "video/mp4",
+                FileSizeBytes = processingResult.FileSizeBytes,
                 DurationSeconds =processingResult.DurationSeconds,
                 FrameRate = processingResult.FrameRate,
                 Width = processingResult.Width,
@@ -189,7 +193,7 @@ public sealed class VideoUploadService(AppDbContext context)
 
             if (!await IsVideoRegisteredAsync(
                     command.DatasetId,
-                    safeFileName,
+                    storedFileName,
                     cancellationToken))
             {
                 DeleteIfExists(finalVideoPath);
@@ -582,7 +586,10 @@ internal sealed record VideoProcessingResult(
     int Height,
 
     [property: JsonPropertyName("codec")]
-    string? Codec);
+    string? Codec,
+
+    [property: JsonPropertyName("fileSizeBytes")]
+    long FileSizeBytes);
 
 public class VideoUploadException(string message)
     : Exception(message);

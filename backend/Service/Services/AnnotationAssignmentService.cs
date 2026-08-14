@@ -140,7 +140,7 @@ public sealed class AnnotationAssignmentService(
     public async Task<AssignmentOutcome>
         AssignNextAsync(
             int datasetId,
-            int assignmentDurationMinutes,
+            int assignmentDurationDays,
             CancellationToken cancellationToken = default)
     {
         if (datasetId <= 0)
@@ -149,13 +149,13 @@ public sealed class AnnotationAssignmentService(
                 "A valid dataset ID is required.");
         }
 
-        if (assignmentDurationMinutes <= 0 ||
-            assignmentDurationMinutes > 1440)
-        {
+        if (assignmentDurationDays <= 0 ||
+            assignmentDurationDays > 365)
+{
             throw new ArgumentException(
-                "Assignment duration must be between " +
-                "1 and 1440 minutes.");
-        }
+            "Assignment duration must be between " +
+            "1 and 365 days.");
+}
 
         await using var transaction =
             await context.Database.BeginTransactionAsync(
@@ -262,7 +262,7 @@ public sealed class AnnotationAssignmentService(
             Status = AnnotationSessionStatus.Assigned,
             AssignedAt = now,
             ExpiresAt =
-                now.AddMinutes(assignmentDurationMinutes)
+                now.AddDays(assignmentDurationDays)
         };
 
         context.AnnotationSessions.Add(session);
@@ -366,15 +366,15 @@ public sealed class AnnotationAssignmentService(
 
     public async Task<ExpirationProcessingResult>
         ProcessExpiredAssignmentsAsync(
-            int reassignmentDurationMinutes,
+            int reassignmentDurationDays,
             CancellationToken cancellationToken = default)
     {
-        if (reassignmentDurationMinutes <= 0 ||
-            reassignmentDurationMinutes > 1440)
+        if (reassignmentDurationDays <= 0 ||
+            reassignmentDurationDays > 365)
         {
             throw new ArgumentException(
                 "Reassignment duration must be between " +
-                "1 and 1440 minutes.");
+                "1 and 365 days.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -419,7 +419,7 @@ public sealed class AnnotationAssignmentService(
             {
                 var outcome = await AssignNextAsync(
                     datasetGroup.Key,
-                    reassignmentDurationMinutes,
+                    reassignmentDurationDays,
                     cancellationToken);
 
                 assignmentOutcomes.Add(outcome);
