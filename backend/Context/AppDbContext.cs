@@ -12,6 +12,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AnnotationSession> AnnotationSessions => Set<AnnotationSession>();
     public DbSet<SegmentResponse> SegmentResponses => Set<SegmentResponse>();
     public DbSet<QuestionAnswer> QuestionAnswers => Set<QuestionAnswer>();
+    public DbSet<AnnotationTaskRequest>AnnotationTaskRequests =>Set<AnnotationTaskRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -178,5 +179,66 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Answer).HasColumnType("nvarchar(max)");
             entity.HasOne(x => x.SegmentResponse).WithMany(x => x.QuestionAnswers).HasForeignKey(x => x.SegmentResponseId);
         });
+
+    modelBuilder.Entity<AnnotationTaskRequest>(entity =>
+{
+    entity.Property(request => request.Status)
+        .HasMaxLength(50)
+        .HasDefaultValue(
+            AnnotationTaskRequestStatus.Waiting);
+
+    entity.ToTable(table =>
+    {
+        table.HasCheckConstraint(
+            "CK_AnnotationTaskRequests_Status",
+            "[Status] IN " +
+            "('Waiting', 'Fulfilled', 'Cancelled')");
+    });
+
+    entity.HasIndex(request => request.Status);
+
+    entity.HasIndex(request => new
+    {
+        request.DatasetId,
+        request.Status,
+        request.RequestedAt
+    });
+
+    entity.HasIndex(request => new
+    {
+        request.AnnotatorId,
+        request.DatasetId,
+        request.Status
+    })
+    .IsUnique()
+    .HasFilter("[Status] = 'Waiting'");
+
+    entity.HasIndex(request =>
+        request.AnnotationSessionId)
+        .IsUnique()
+        .HasFilter(
+            "[AnnotationSessionId] IS NOT NULL");
+
+    entity.HasOne(request => request.Annotator)
+        .WithMany(annotator =>
+            annotator.AnnotationTaskRequests)
+        .HasForeignKey(request =>
+            request.AnnotatorId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+    entity.HasOne(request => request.Dataset)
+        .WithMany(dataset =>
+            dataset.AnnotationTaskRequests)
+        .HasForeignKey(request =>
+            request.DatasetId)
+        .OnDelete(DeleteBehavior.Restrict);
+
+    entity.HasOne(request =>
+            request.AnnotationSession)
+        .WithOne()
+        .HasForeignKey<AnnotationTaskRequest>(
+            request => request.AnnotationSessionId)
+        .OnDelete(DeleteBehavior.Restrict);
+});    
     }
 }

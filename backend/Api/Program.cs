@@ -36,6 +36,7 @@ builder.Services.AddScoped<IEntityService<SegmentResponse>, SegmentResponseServi
 builder.Services.AddScoped<IEntityService<QuestionAnswer>, QuestionAnswerService>();
 builder.Services.AddScoped<ManifestService>();
 builder.Services.AddScoped<VideoUploadService>();
+builder.Services.AddScoped<AnnotationAssignmentService>();
 
 // TODO: Register these once the files are created in your project:
 // builder.Services.AddScoped<AuthService>();
