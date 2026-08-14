@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { FileText, HelpCircle, Trash2, Send, Mic, Play } from "lucide-react";
 
 export interface Segment {
@@ -33,6 +33,43 @@ function parseTimeToSeconds(str: string): number {
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0] || 0;
+}
+
+// Auto-resizing Textarea component to make the tile auto-expand smoothly
+function AutoResizingTextarea({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  className?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const adjustHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  };
+
+  useEffect(() => {
+    adjustHeight();
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      rows={1}
+      value={value}
+      onChange={(e) => {
+        onChange(e.target.value);
+        adjustHeight();
+      }}
+      className={`w-full resize-none overflow-hidden ${className}`}
+    />
+  );
 }
 
 export default function AnnotationControls({
@@ -154,12 +191,11 @@ export default function AnnotationControls({
                   </button>
                 </div>
 
-                {/* Inline Editable Textarea */}
-                <textarea
+                {/* Auto-expanding Editable Textarea */}
+                <AutoResizingTextarea
                   value={seg.text}
-                  onChange={(e) => handleTextChange(seg.id, e.target.value)}
-                  className="w-full resize-none text-sm text-slate-700 bg-slate-50/60 hover:bg-slate-50 focus:bg-white border border-transparent hover:border-slate-200 focus:border-blue-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed transition-all"
-                  rows={3}
+                  onChange={(text) => handleTextChange(seg.id, text)}
+                  className="text-sm text-slate-700 bg-slate-50/60 hover:bg-slate-50 focus:bg-white border border-transparent hover:border-slate-200 focus:border-blue-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed transition-all"
                 />
 
                 {seg.labels.length > 0 && (
@@ -184,18 +220,14 @@ export default function AnnotationControls({
         )}
       </div>
 
-      {/* Draft Input Box */}
+      {/* Input Box for Creating New Transcriptions */}
       <div className="border-t border-slate-200 pt-3 mt-3">
         <div className="relative">
           <textarea
             value={draftText}
             onChange={(e) => setDraftText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              segments.length > 0
-                ? "Type to append text to current annotation..."
-                : "Type transcription here..."
-            }
+            placeholder="Type new transcription segment here..."
             rows={2}
             className="w-full resize-none rounded-lg border border-slate-200 bg-white p-3 pr-16 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
           />
@@ -215,10 +247,8 @@ export default function AnnotationControls({
             </button>
           </div>
         </div>
-        <p className="text-xs text-slate-400 mt-1">
-          {segments.length > 0
-            ? "Press Enter to append text to the annotation tile above."
-            : `Current: ${currentTime.toFixed(2)}s — creates initial annotation tile.`}
+        <p className="text-xs text-slate-400 mt-1 font-mono">
+          Current time: {currentTime.toFixed(2)}s — Press Enter to submit segment.
         </p>
       </div>
     </div>
