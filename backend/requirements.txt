@@ -1,0 +1,16 @@
+# Annotation-Platform — Python script dependencies
+# Install with: pip install -r requirements.txt  (inside a venv — see README/team note)
+#
+# Confirmed against: speech_to_text.py, video_processing.py
+# NOT yet confirmed: db_seed.py — does not exist yet. Whoever writes it must
+# add its own deps here (e.g. a SQL Server driver) rather than leave this file stale.
+
+# --- speech_to_text.py ---
+openai-whisper==20231117
+# openai-whisper pulls in torch as a dependency automatically — large download,
+# expect several GB on first install.
+
+# --- video_processing.py ---
+# No pip packages required — stdlib only (subprocess calls to ffmpeg/ffprobe directly).
+
+# --- db_seed.py — not yet written. Add its dependencies here once created. ---
