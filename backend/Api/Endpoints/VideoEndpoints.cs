@@ -1,30 +1,186 @@
-using Context.Entities;
-using Service;
+using Service.Services;
 
 namespace Api.Endpoints;
 
 public static class VideoEndpoints
 {
-    public static RouteGroupBuilder MapVideoEndpoints(this IEndpointRouteBuilder routes)
+    public static RouteGroupBuilder MapVideoEndpoints(
+        this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/videos").WithTags("Videos");
-        group.MapGet("/", async (IEntityService<Video> service, CancellationToken ct) => Results.Ok((await service.GetAllAsync(ct)).Select(ToResponse)));
-        group.MapGet("/{id:int}", async (int id, IEntityService<Video> service, CancellationToken ct) => await service.GetByIdAsync([id], ct) is { } x ? Results.Ok(ToResponse(x)) : Results.NotFound());
-        group.MapPost("/", async (VideoRequest r, IEntityService<Video> service, CancellationToken ct) =>
-        {
-            var x = await service.CreateAsync(new Video { FileName = r.FileName, StoragePath = r.StoragePath, UploadedByAdminId = r.UploadedByAdminId, UploadedAt = r.UploadedAt }, ct);
-            return Results.Created($"/api/videos/{x.Id}", ToResponse(x));
-        });
-        group.MapPut("/{id:int}", async (int id, VideoRequest r, IEntityService<Video> service, CancellationToken ct) =>
-        {
-            var x = await service.GetByIdAsync([id], ct); if (x is null) return Results.NotFound();
-            x.FileName = r.FileName; x.StoragePath = r.StoragePath; x.UploadedByAdminId = r.UploadedByAdminId; x.UploadedAt = r.UploadedAt;
-            await service.UpdateAsync(x, ct); return Results.Ok(ToResponse(x));
-        });
-        group.MapDelete("/{id:int}", async (int id, IEntityService<Video> service, CancellationToken ct) => await service.DeleteAsync([id], ct) ? Results.NoContent() : Results.NotFound());
+        var group = routes
+            .MapGroup("/api/videos")
+            .WithTags("Videos");
+
+        group.MapGet(
+            "/",
+            GetCatalogAsync);
+
+        group.MapGet(
+            "/{id:int}",
+            GetVideoAsync);
+
+        group.MapGet(
+            "/{id:int}/stream",
+            StreamVideoAsync);
+
+        group.MapGet(
+            "/{id:int}/thumbnail",
+            GetThumbnailAsync);
+
+        group.MapPatch(
+            "/{id:int}/quota",
+            UpdateQuotaAsync);
+
+        group.MapGet(
+            "/datasets/{datasetId:int}/metrics",
+            GetDatasetMetricsAsync);
+
         return group;
     }
-    private static VideoResponse ToResponse(Video x) => new(x.Id, x.FileName, x.StoragePath, x.UploadedByAdminId, x.UploadedAt);
-    public sealed record VideoRequest(string FileName, string StoragePath, int UploadedByAdminId, DateTimeOffset UploadedAt);
-    public sealed record VideoResponse(int Id, string FileName, string StoragePath, int UploadedByAdminId, DateTimeOffset UploadedAt);
+
+    private static async Task<IResult> GetCatalogAsync(
+        int? datasetId,
+        bool? includeArchived,
+        VideoService videoService,
+        CancellationToken cancellationToken)
+    {
+        var videos = await videoService.GetCatalogAsync(
+            datasetId,
+            includeArchived ?? false,
+            cancellationToken);
+
+        return Results.Ok(videos);
+    }
+
+    private static async Task<IResult> GetVideoAsync(
+        int id,
+        VideoService videoService,
+        CancellationToken cancellationToken)
+    {
+        var video =
+            await videoService.GetCatalogItemAsync(
+                id,
+                cancellationToken);
+
+        return video is null
+            ? Results.NotFound(new
+            {
+                message = $"Video {id} does not exist."
+            })
+            : Results.Ok(video);
+    }
+
+    private static async Task<IResult> StreamVideoAsync(
+        int id,
+        VideoService videoService,
+        CancellationToken cancellationToken)
+    {
+        var video =
+            await videoService.GetStoredVideoAsync(
+                id,
+                cancellationToken);
+
+        if (video is null)
+        {
+            return Results.NotFound(new
+            {
+                message = $"Video {id} does not exist."
+            });
+        }
+
+        if (!File.Exists(video.StoragePath))
+        {
+            return Results.NotFound(new
+            {
+                message =
+                    "The video record exists, but its file is missing."
+            });
+        }
+
+        return Results.File(
+            video.StoragePath,
+            video.MimeType,
+            enableRangeProcessing: true);
+    }
+
+    private static async Task<IResult> GetThumbnailAsync(
+        int id,
+        VideoService videoService,
+        CancellationToken cancellationToken)
+    {
+        var thumbnail =
+            await videoService.GetStoredThumbnailAsync(
+                id,
+                cancellationToken);
+
+        if (thumbnail is null ||
+            !File.Exists(thumbnail.ThumbnailPath))
+        {
+            return Results.NotFound(new
+            {
+                message =
+                    $"A thumbnail for video {id} was not found."
+            });
+        }
+
+        return Results.File(
+            thumbnail.ThumbnailPath,
+            "image/jpeg");
+    }
+
+    private static async Task<IResult> UpdateQuotaAsync(
+        int id,
+        UpdateVideoQuotaRequest request,
+        VideoService videoService,
+        CancellationToken cancellationToken)
+    {
+        if (request.RequiredAnnotationCount <= 0)
+        {
+            return Results.BadRequest(new
+            {
+                message =
+                    "RequiredAnnotationCount must be positive."
+            });
+        }
+
+        var video = await videoService.UpdateQuotaAsync(
+            id,
+            request.RequiredAnnotationCount,
+            cancellationToken);
+
+        return video is null
+            ? Results.NotFound(new
+            {
+                message = $"Video {id} does not exist."
+            })
+            : Results.Ok(new
+            {
+                message =
+                    "The required annotation count was updated.",
+                video
+            });
+    }
+
+    private static async Task<IResult>
+        GetDatasetMetricsAsync(
+            int datasetId,
+            VideoService videoService,
+            CancellationToken cancellationToken)
+    {
+        var metrics =
+            await videoService.GetDatasetMetricsAsync(
+                datasetId,
+                cancellationToken);
+
+        return metrics is null
+            ? Results.NotFound(new
+            {
+                message =
+                    $"Dataset {datasetId} does not exist."
+            })
+            : Results.Ok(metrics);
+    }
 }
+
+public sealed record UpdateVideoQuotaRequest(
+    int RequiredAnnotationCount);

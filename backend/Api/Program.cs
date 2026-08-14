@@ -28,14 +28,15 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Existing generic entity services
+builder.Services.AddScoped<VideoService>();
 builder.Services.AddScoped<IEntityService<Admin>, AdminService>();
 builder.Services.AddScoped<IEntityService<Annotator>, AnnotatorService>();
-builder.Services.AddScoped<IEntityService<Video>, VideoService>();
 builder.Services.AddScoped<IEntityService<AnnotationSession>, AnnotationSessionService>();
 builder.Services.AddScoped<IEntityService<SegmentResponse>, SegmentResponseService>();
 builder.Services.AddScoped<IEntityService<QuestionAnswer>, QuestionAnswerService>();
 builder.Services.AddScoped<ManifestService>();
 builder.Services.AddScoped<VideoUploadService>();
+
 // TODO: Register these once the files are created in your project:
 // builder.Services.AddScoped<AuthService>();
 // builder.Services.AddScoped<SurveyService>();
