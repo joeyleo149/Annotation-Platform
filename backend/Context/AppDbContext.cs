@@ -48,7 +48,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     entity.Property(x => x.IsArchived)
         .HasDefaultValue(false);
 
-    entity.HasIndex(x => x.Name);
+    entity.HasIndex(x => x.Name)
+    .IsUnique();
 
     entity.HasIndex(x => x.IsArchived);
 });
@@ -90,8 +91,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     entity.Property(x => x.OriginalReasoningJson)
         .HasColumnType("nvarchar(max)");
 
-    entity.HasIndex(x => x.FileName)
-        .IsUnique();
+    entity.HasIndex(x => new
+    {
+        x.DatasetId,
+        x.FileName
+    })
+    .IsUnique();
 
     entity.HasIndex(x => x.ScenarioId);
 

@@ -58,8 +58,28 @@ public sealed class VideoUploadService(AppDbContext context)
                 $"Admin {command.UploadedByAdminId} does not exist.");
         }
 
+        var dataset = await context.Datasets
+    .AsNoTracking()
+    .SingleOrDefaultAsync(
+        item => item.Id == command.DatasetId,
+        cancellationToken);
+
+        if (dataset is null)
+{
+            throw new VideoUploadException(
+                $"Dataset {command.DatasetId} does not exist.");
+}
+
+        if (dataset.IsArchived)
+{
+            throw new VideoUploadException(
+                $"Dataset '{dataset.Name}' is archived.");
+}
+
         var duplicateExists = await context.Videos.AnyAsync(
-            video => video.FileName == safeFileName,
+            video =>
+            video.DatasetId == command.DatasetId &&
+            video.FileName == safeFileName,
             cancellationToken);
 
         if (duplicateExists)
@@ -127,8 +147,7 @@ public sealed class VideoUploadService(AppDbContext context)
                 StoragePath = finalVideoPath,
                 MimeType = NormalizeMimeType(extension),
                 FileSizeBytes = command.FileSizeBytes,
-                DurationSeconds =
-                    processingResult.DurationSeconds,
+                DurationSeconds =processingResult.DurationSeconds,
                 FrameRate = processingResult.FrameRate,
                 Width = processingResult.Width,
                 Height = processingResult.Height,
@@ -137,14 +156,15 @@ public sealed class VideoUploadService(AppDbContext context)
                 ProcessingError = null,
                 ManifestMatched = true,
                 ScenarioType = manifestMatch.ScenarioType,
-                DrivingInstruction =
-                    manifestMatch.DrivingInstruction,
+                DrivingInstruction =manifestMatch.DrivingInstruction,  
                 TrajectoryJson = manifestMatch.TrajectoryJson,
                 ActionsJson = manifestMatch.ActionsJson,
-                OriginalReasoningJson =
-                    manifestMatch.OriginalReasoningJson,
+                OriginalReasoningJson = manifestMatch.OriginalReasoningJson,
                 UploadedByAdminId = command.UploadedByAdminId,
-                UploadedAt = DateTimeOffset.UtcNow
+                UploadedAt = DateTimeOffset.UtcNow,                     
+                DatasetId = command.DatasetId,
+                RequiredAnnotationCount = command.RequiredAnnotationCount,
+                                           
             };
 
             context.Videos.Add(video);
@@ -168,6 +188,7 @@ public sealed class VideoUploadService(AppDbContext context)
             DeleteIfExists(temporaryVideoPath);
 
             if (!await IsVideoRegisteredAsync(
+                    command.DatasetId,
                     safeFileName,
                     cancellationToken))
             {
@@ -211,7 +232,19 @@ public sealed class VideoUploadService(AppDbContext context)
             throw new VideoUploadException(
                 "A valid administrator ID is required.");
         }
+        if (command.DatasetId <= 0)
+{
+            throw new VideoUploadException(
+                "A valid dataset ID is required.");
+}
 
+        if (command.RequiredAnnotationCount <= 0)
+{
+            throw new VideoUploadException(
+                "The required annotation count must be positive.");
+}
+
+        
         if (!File.Exists(command.ManifestPath))
         {
             throw new VideoUploadException(
@@ -472,13 +505,16 @@ public sealed class VideoUploadService(AppDbContext context)
     }
 
     private async Task<bool> IsVideoRegisteredAsync(
-        string fileName,
-        CancellationToken cancellationToken)
-    {
-        return await context.Videos.AnyAsync(
-            video => video.FileName == fileName,
-            cancellationToken);
-    }
+    int datasetId,
+    string fileName,
+    CancellationToken cancellationToken)
+{
+    return await context.Videos.AnyAsync(
+        video =>
+            video.DatasetId == datasetId &&
+            video.FileName == fileName,
+        cancellationToken);
+}
 
     private static void DeleteIfExists(
         string path)
@@ -496,6 +532,8 @@ public sealed record VideoUploadCommand(
     string ContentType,
     long FileSizeBytes,
     int UploadedByAdminId,
+    int DatasetId,
+    int RequiredAnnotationCount,
     long MaximumFileSizeBytes,
     string VideoDirectory,
     string ThumbnailDirectory,
