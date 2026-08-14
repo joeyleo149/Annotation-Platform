@@ -1,0 +1,195 @@
+import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, Captions, Maximize } from "lucide-react";
+
+const PLAYBACK_RATES = [0.5, 1, 1.5, 2] as const;
+const ASSUMED_FPS = 29.97;
+
+export interface VideoPlayerHandle {
+  getCurrentTime: () => number;
+  seekTo: (seconds: number) => void;
+}
+
+interface VideoPlayerProps {
+  src: string;
+  fps?: number;
+  resolutionLabel?: string; // e.g. "1080p"
+  onTimeUpdate?: (seconds: number) => void;
+}
+
+function formatTimestamp(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
+  ({ src, fps = ASSUMED_FPS, resolutionLabel = "1080p", onTimeUpdate }, ref) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [rate, setRate] = useState<number>(1);
+    const frameDuration = 1 / fps;
+
+    useImperativeHandle(ref, () => ({
+      getCurrentTime: () => videoRef.current?.currentTime ?? 0,
+      seekTo: (seconds: number) => {
+        if (videoRef.current) videoRef.current.currentTime = seconds;
+      },
+    }));
+
+    const handleTimeUpdate = useCallback(() => {
+      const t = videoRef.current?.currentTime ?? 0;
+      setCurrentTime(t);
+      onTimeUpdate?.(t);
+    }, [onTimeUpdate]);
+
+    useEffect(() => {
+      if (videoRef.current) videoRef.current.playbackRate = rate;
+    }, [rate]);
+
+    const togglePlay = () => {
+      if (!videoRef.current) return;
+      if (videoRef.current.paused) {
+        videoRef.current.play();
+        setIsPlaying(true);
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    };
+
+    const stepFrame = (direction: 1 | -1) => {
+      if (!videoRef.current) return;
+      videoRef.current.pause();
+      setIsPlaying(false);
+      const next = Math.min(
+        Math.max(videoRef.current.currentTime + direction * frameDuration, 0),
+        duration
+      );
+      videoRef.current.currentTime = next;
+    };
+
+    const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const t = Number(e.target.value);
+      if (videoRef.current) videoRef.current.currentTime = t;
+      setCurrentTime(t);
+    };
+
+    const toggleFullscreen = () => {
+      if (!containerRef.current) return;
+      if (document.fullscreenElement) document.exitFullscreen();
+      else containerRef.current.requestFullscreen();
+    };
+
+    const progressPct = duration ? (currentTime / duration) * 100 : 0;
+
+    return (
+      <div className="flex flex-col">
+        {/* Meta bar */}
+        <div className="flex items-center justify-end gap-2 mb-2">
+          <span className="text-xs font-medium px-2 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+            {resolutionLabel}
+          </span>
+          <span className="text-xs font-medium px-2 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+            {fps.toFixed(2)} fps
+          </span>
+        </div>
+
+        <div
+          ref={containerRef}
+          className="relative rounded-xl overflow-hidden bg-black shadow-sm"
+        >
+          <video
+            ref={videoRef}
+            src={src}
+            className="w-full block"
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={() => setDuration(videoRef.current?.duration ?? 0)}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onClick={togglePlay}
+          />
+
+          {/* Control bar */}
+          <div className="bg-black/90 px-4 py-3 flex items-center gap-4">
+            <button onClick={togglePlay} className="text-white hover:text-blue-400" aria-label="Play/pause">
+              {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+            </button>
+            <button onClick={() => stepFrame(-1)} className="text-white hover:text-blue-400" aria-label="Previous frame">
+              <SkipBack size={16} />
+            </button>
+            <button onClick={() => stepFrame(1)} className="text-white hover:text-blue-400" aria-label="Next frame">
+              <SkipForward size={16} />
+            </button>
+
+            <span className="text-white text-sm font-mono tabular-nums w-28 shrink-0">
+              {formatTimestamp(currentTime)} / {formatTimestamp(duration)}
+            </span>
+
+            <div className="relative flex-1 flex items-center">
+              <input
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={frameDuration}
+                value={currentTime}
+                onChange={handleScrub}
+                className="w-full h-1.5 rounded-full appearance-none bg-white/20 accent-blue-600 cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, #2563eb ${progressPct}%, rgba(255,255,255,0.2) ${progressPct}%)`,
+                }}
+                aria-label="Timeline scrubber"
+              />
+            </div>
+
+            <button className="text-white hover:text-blue-400" aria-label="Volume">
+              <Volume2 size={18} />
+            </button>
+            <button className="text-white hover:text-blue-400" aria-label="Captions">
+              <Captions size={18} />
+            </button>
+            <button onClick={toggleFullscreen} className="text-white hover:text-blue-400" aria-label="Fullscreen">
+              <Maximize size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Playback rate + tools row */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm text-slate-600 flex items-center gap-1.5">
+              ↶ Undo
+            </button>
+            <button className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm text-slate-600 flex items-center gap-1.5">
+              ↷ Redo
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {PLAYBACK_RATES.map((r) => (
+              <button
+                key={r}
+                onClick={() => setRate(r)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono border ${
+                  rate === r
+                    ? "bg-blue-600 border-blue-600 text-white"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {r}x
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+);
+
+VideoPlayer.displayName = "VideoPlayer";
+
+export default VideoPlayer;

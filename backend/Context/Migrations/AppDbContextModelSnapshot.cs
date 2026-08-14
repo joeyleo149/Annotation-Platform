@@ -17,7 +17,7 @@ namespace Context.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -69,6 +69,9 @@ namespace Context.Migrations
 
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.Property<int>("VideoId")
                         .HasColumnType("int");
@@ -154,8 +157,14 @@ namespace Context.Migrations
                     b.Property<int>("AnnotationSessionId")
                         .HasColumnType("int");
 
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("time");
+
                     b.Property<int>("SegmentNumber")
                         .HasColumnType("int");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("time");
 
                     b.Property<DateTimeOffset>("SubmittedAt")
                         .HasColumnType("datetimeoffset");
