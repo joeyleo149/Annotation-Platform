@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { ChevronRight, Folder } from "lucide-react";
 import VideoPlayer, { type VideoPlayerHandle } from "../components/VideoPlayer";
 import AnnotationControls, { type Segment } from "../components/AnnotationControls";

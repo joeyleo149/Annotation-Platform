@@ -27,7 +27,7 @@ public static class SegmentResponseEndpoints
             var session = await sessionService.GetByIdAsync([r.AnnotationSessionId], ct);
             if (session is null)
                 return Results.BadRequest(new { error = "Annotation session not found." });
-            if (session.Status == SessionStatus.Completed)
+            if (session.Status == AnnotationSessionStatus.Completed)
                 return Results.BadRequest(new { error = "Cannot add segments to a completed session." });
             if (DateTimeOffset.UtcNow > session.ExpiresAt)
                 return Results.BadRequest(new { error = "Annotation session has expired." });
@@ -42,9 +42,9 @@ public static class SegmentResponseEndpoints
                 SubmittedAt = r.SubmittedAt,
             }, ct);
 
-            if (session.Status == SessionStatus.Assigned)
+            if (session.Status == AnnotationSessionStatus.Assigned)
             {
-                session.Status = SessionStatus.InProgress;
+                session.Status = AnnotationSessionStatus.InProgress;
                 await sessionService.UpdateAsync(session, ct);
             }
 
