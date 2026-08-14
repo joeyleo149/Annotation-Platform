@@ -40,6 +40,8 @@ builder.Services.AddScoped<VideoUploadService>();
 builder.Services.AddScoped<AnnotationAssignmentService>();
 builder.Services.AddScoped<AnnotationExportService>();
 builder.Services.AddHostedService<AssignmentExpirationWorker>();
+builder.Services.AddScoped<ArchiveService>();
+builder.Services.AddHostedService<DatasetArchiveWorker>();
 
 
 var app = builder.Build();
@@ -66,5 +68,6 @@ app.MapSegmentResponseEndpoints();
 app.MapQuestionAnswerEndpoints();
 app.MapUploadEndpoints();
 app.MapAnnotationExportEndpoints();
+app.MapDatasetEndpoints();
 
 app.Run();

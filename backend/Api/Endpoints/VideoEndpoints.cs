@@ -35,6 +35,15 @@ public static class VideoEndpoints
             "/datasets/{datasetId:int}/metrics",
             GetDatasetMetricsAsync);
 
+
+        group.MapPatch(
+            "/{id:int}/archive",
+            ArchiveVideoAsync);
+
+        group.MapPatch(
+            "/{id:int}/restore",
+            RestoreVideoAsync);
+
         return group;
     }
 
@@ -180,6 +189,51 @@ public static class VideoEndpoints
             })
             : Results.Ok(metrics);
     }
+    private static async Task<IResult> ArchiveVideoAsync(
+    int id,
+    ArchiveService archiveService,
+    CancellationToken cancellationToken)
+{
+    var outcome =
+        await archiveService.ArchiveVideoAsync(
+            id,
+            cancellationToken);
+
+    if (!outcome.Found)
+    {
+        return Results.NotFound(outcome);
+    }
+
+    if (!outcome.Archived)
+    {
+        return Results.Conflict(outcome);
+    }
+
+    return Results.Ok(outcome);
+}
+
+private static async Task<IResult> RestoreVideoAsync(
+    int id,
+    ArchiveService archiveService,
+    CancellationToken cancellationToken)
+{
+    var outcome =
+        await archiveService.RestoreVideoAsync(
+            id,
+            cancellationToken);
+
+    if (!outcome.Found)
+    {
+        return Results.NotFound(outcome);
+    }
+
+    if (outcome.DatasetArchived)
+    {
+        return Results.Conflict(outcome);
+    }
+
+    return Results.Ok(outcome);
+}
 }
 
 public sealed record UpdateVideoQuotaRequest(
