@@ -25,12 +25,7 @@ namespace Context.Migrations
                 nullable: false,
                 defaultValue: new TimeSpan(0, 0, 0, 0, 0));
 
-            migrationBuilder.AddColumn<int>(
-                name: "Status",
-                table: "AnnotationSessions",
-                type: "int",
-                nullable: false,
-                defaultValue: 0);
+
         }
 
         /// <inheritdoc />
@@ -43,10 +38,6 @@ namespace Context.Migrations
             migrationBuilder.DropColumn(
                 name: "StartTime",
                 table: "SegmentResponses");
-
-            migrationBuilder.DropColumn(
-                name: "Status",
-                table: "AnnotationSessions");
         }
     }
 }
