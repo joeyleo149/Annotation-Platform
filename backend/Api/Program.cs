@@ -2,10 +2,15 @@ using Api.Endpoints;
 using Context;
 using Context.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using Service;
 using Service.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
 
 // 1. Configure CORS to allow React frontend (Vite default port 5173)
 var allowReactApp = "_allowReactApp";
@@ -23,6 +28,29 @@ builder.Services.AddCors(options =>
 
 // Add services to the container
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new() { Title = "Annotate Pro API", Version = "v1" });
+});
+var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is required.");
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+builder.Services.AddAuthorization();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -35,14 +63,13 @@ builder.Services.AddScoped<IEntityService<AnnotationSession>, AnnotationSessionS
 builder.Services.AddScoped<IEntityService<SegmentResponse>, SegmentResponseService>();
 builder.Services.AddScoped<IEntityService<QuestionAnswer>, QuestionAnswerService>();
 
-builder.Services.AddScoped<IEntityService<Question>, QuestionService>();
-
-// TODO: Register these once the files are created in your project:
-// builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<AuthService>();
 // builder.Services.AddScoped<SurveyService>();
 // builder.Services.AddScoped<VideoUploadService>();
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Enable CORS middleware (Must be before app.MapGet / endpoints)
 app.UseCors(allowReactApp);
@@ -50,24 +77,31 @@ app.UseCors(allowReactApp);
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Annotate Pro API v1");
+        options.RoutePrefix = "swagger";
+    });
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 // 2. Temporary test endpoint to verify React -> ASP.NET connection
 app.MapGet("/api/test", () => Results.Ok(new { message = "Backend connection successful!" }));
 
 // Existing endpoint mappings
-app.MapAdminEndpoints();
-app.MapAnnotatorEndpoints();
-app.MapVideoEndpoints();
-app.MapAnnotationSessionEndpoints();
-app.MapSegmentResponseEndpoints();
-app.MapQuestionAnswerEndpoints();
-app.MapQuestionEndpoints();
+app.MapAdminEndpoints().RequireAuthorization(policy => policy.RequireRole("Admin"));
+app.MapAnnotatorEndpoints().RequireAuthorization();
+app.MapVideoEndpoints().RequireAuthorization();
+app.MapAnnotationSessionEndpoints().RequireAuthorization();
+app.MapSegmentResponseEndpoints().RequireAuthorization();
+app.MapQuestionAnswerEndpoints().RequireAuthorization();
+app.MapAuthEndpoints();
 
 // TODO: Map these once AuthEndpoints.cs, SurveyEndpoints.cs, and UploadEndpoints.cs are created:
-// app.MapAuthEndpoints();
 // app.MapSurveyEndpoints();
 // app.MapUploadEndpoints();
 
