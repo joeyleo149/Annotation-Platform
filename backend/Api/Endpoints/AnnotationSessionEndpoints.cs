@@ -1,64 +1,215 @@
-using Context.Entities;
-using Service;
+using Service.Services;
 
 namespace Api.Endpoints;
 
 public static class AnnotationSessionEndpoints
 {
-    public static RouteGroupBuilder MapAnnotationSessionEndpoints(this IEndpointRouteBuilder routes)
+    public static RouteGroupBuilder
+        MapAnnotationSessionEndpoints(
+            this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/annotation-sessions").WithTags("Annotation Sessions");
+        var group = routes
+            .MapGroup("/api/annotation-sessions")
+            .WithTags("Annotation Sessions");
 
-        group.MapGet("/", async (IEntityService<AnnotationSession> service, CancellationToken ct) =>
-            Results.Ok((await service.GetAllAsync(ct)).Select(ToResponse)));
-
-        group.MapGet("/{id:int}", async (int id, IEntityService<AnnotationSession> service, CancellationToken ct) =>
-            await service.GetByIdAsync([id], ct) is { } x ? Results.Ok(ToResponse(x)) : Results.NotFound());
-
-        // Status is never accepted from the client — new sessions always start as Assigned.
-        // It flips to InProgress automatically on first SegmentResponse (see SegmentResponseEndpoints.cs).
-        // Completed is a separate, not-yet-built action — not exposed here.
-        group.MapPost("/", async (AnnotationSessionRequest r, IEntityService<AnnotationSession> service, CancellationToken ct) =>
-        {
-            var x = await service.CreateAsync(new AnnotationSession
-            {
-                AnnotatorId = r.AnnotatorId,
-                VideoId = r.VideoId,
-                Status = SessionStatus.Assigned,
-                AssignedAt = r.AssignedAt,
-                ExpiresAt = r.ExpiresAt,
-            }, ct);
-            return Results.Created($"/api/annotation-sessions/{x.Id}", ToResponse(x));
-        });
-
-        // Note: intentionally does not touch Status. Reassigning annotator/video/expiry
-        // does not change progress state.
-        group.MapPut("/{id:int}", async (int id, AnnotationSessionRequest r, IEntityService<AnnotationSession> service, CancellationToken ct) =>
-        {
-            var x = await service.GetByIdAsync([id], ct);
-            if (x is null) return Results.NotFound();
-
-            x.AnnotatorId = r.AnnotatorId;
-            x.VideoId = r.VideoId;
-            x.ExpiresAt = r.ExpiresAt;
-
-            await service.UpdateAsync(x, ct);
-            return Results.Ok(ToResponse(x));
-        });
-
-        group.MapDelete("/{id:int}", async (int id, IEntityService<AnnotationSession> service, CancellationToken ct) =>
-            await service.DeleteAsync([id], ct) ? Results.NoContent() : Results.NotFound());
+        group.MapGet("/", GetSessionsAsync);
+        group.MapGet("/{id:int}", GetSessionAsync);
+        group.MapGet("/requests", GetRequestsAsync);
+        group.MapPost("/requests", CreateRequestAsync);
+        group.MapDelete(
+            "/requests/{requestId:int}",
+            CancelRequestAsync);
+        group.MapPost("/assign-next", AssignNextAsync);
+        group.MapPost(
+            "/process-expired",
+            ProcessExpiredAsync);
 
         return group;
     }
 
-    private static AnnotationSessionResponse ToResponse(AnnotationSession x) =>
-        new(x.Id, x.AnnotatorId, x.VideoId, x.Status, x.AssignedAt, x.ExpiresAt);
+    private static async Task<IResult> GetSessionsAsync(
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        var sessions =
+            await assignmentService.GetSessionsAsync(
+                cancellationToken);
 
-    public sealed record AnnotationSessionRequest(
-        int AnnotatorId, int VideoId, DateTimeOffset AssignedAt, DateTimeOffset ExpiresAt);
+        return Results.Ok(sessions);
+    }
 
-    public sealed record AnnotationSessionResponse(
-        int Id, int AnnotatorId, int VideoId, SessionStatus Status,
-        DateTimeOffset AssignedAt, DateTimeOffset ExpiresAt);
+    private static async Task<IResult> GetSessionAsync(
+        int id,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        var session =
+            await assignmentService.GetSessionAsync(
+                id,
+                cancellationToken);
+
+        return session is null
+            ? Results.NotFound(new
+            {
+                message =
+                    $"Annotation session {id} does not exist."
+            })
+            : Results.Ok(session);
+    }
+
+    private static async Task<IResult> GetRequestsAsync(
+        int? datasetId,
+        string? status,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        var requests =
+            await assignmentService.GetRequestsAsync(
+                datasetId,
+                status,
+                cancellationToken);
+
+        return Results.Ok(requests);
+    }
+
+    private static async Task<IResult> CreateRequestAsync(
+        CreateTaskRequest request,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result =
+                await assignmentService.CreateRequestAsync(
+                    request.AnnotatorId,
+                    request.DatasetId,
+                    cancellationToken);
+
+            return Results.Created(
+                $"/api/annotation-sessions/requests/{result.Id}",
+                result);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(new
+            {
+                message = exception.Message
+            });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return Results.NotFound(new
+            {
+                message = exception.Message
+            });
+        }
+        catch (TaskRequestConflictException exception)
+        {
+            return Results.Conflict(new
+            {
+                message = exception.Message
+            });
+        }
+    }
+
+    private static async Task<IResult> CancelRequestAsync(
+        int requestId,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        var cancelled =
+            await assignmentService.CancelRequestAsync(
+                requestId,
+                cancellationToken);
+
+        return cancelled
+            ? Results.Ok(new
+            {
+                message =
+                    "The waiting request was cancelled."
+            })
+            : Results.NotFound(new
+            {
+                message =
+                    "A waiting request with that ID was not found."
+            });
+    }
+
+    private static async Task<IResult> AssignNextAsync(
+        AssignNextRequest request,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var outcome =
+                await assignmentService.AssignNextAsync(
+                    request.DatasetId,
+                    request.AssignmentDurationDays,
+                    cancellationToken);
+
+            return outcome.Assigned
+                ? Results.Ok(outcome)
+                : Results.Conflict(outcome);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(new
+            {
+                message = exception.Message
+            });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return Results.NotFound(new
+            {
+                message = exception.Message
+            });
+        }
+        catch (TaskRequestConflictException exception)
+        {
+            return Results.Conflict(new
+            {
+                message = exception.Message
+            });
+        }
+    }
+
+    private static async Task<IResult> ProcessExpiredAsync(
+        AnnotationAssignmentService assignmentService,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var reassignmentDurationDays =
+            configuration.GetValue<int>(
+                "AssignmentProcessing:" +
+                "DefaultAssignmentDurationDays",
+                1);
+
+        try
+        {
+            var result =
+                await assignmentService
+                    .ProcessExpiredAssignmentsAsync(
+                        reassignmentDurationDays,
+                        cancellationToken);
+
+            return Results.Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return Results.BadRequest(new
+            {
+                message = exception.Message
+            });
+        }
+    }
 }
+
+public sealed record CreateTaskRequest(
+    int AnnotatorId,
+    int DatasetId);
+
+public sealed record AssignNextRequest(
+    int DatasetId,
+    int AssignmentDurationDays);

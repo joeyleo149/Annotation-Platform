@@ -9,3 +9,13 @@
 **/dist/
 .env
 .env.local
+
+# Uploaded runtime data
+backend/Api/Storage/Videos/*
+backend/Api/Storage/Thumbnails/*
+backend/Api/Storage/Manifests/*
+
+# Preserve runtime folder structure
+!backend/Api/Storage/Videos/.gitkeep
+!backend/Api/Storage/Thumbnails/.gitkeep
+!backend/Api/Storage/Manifests/.gitkeep

@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Service;
 using Service.Services;
+using Api.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -56,12 +57,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Existing generic entity services
+builder.Services.AddScoped<VideoService>();
 builder.Services.AddScoped<IEntityService<Admin>, AdminService>();
 builder.Services.AddScoped<IEntityService<Annotator>, AnnotatorService>();
-builder.Services.AddScoped<IEntityService<Video>, VideoService>();
 builder.Services.AddScoped<IEntityService<AnnotationSession>, AnnotationSessionService>();
 builder.Services.AddScoped<IEntityService<SegmentResponse>, SegmentResponseService>();
 builder.Services.AddScoped<IEntityService<QuestionAnswer>, QuestionAnswerService>();
+builder.Services.AddScoped<ManifestService>();
+builder.Services.AddScoped<VideoUploadService>();
+builder.Services.AddScoped<AnnotationAssignmentService>();
+builder.Services.AddScoped<AnnotationExportService>();
+builder.Services.AddHostedService<AssignmentExpirationWorker>();
+builder.Services.AddScoped<ArchiveService>();
+builder.Services.AddHostedService<DatasetArchiveWorker>();
 
 builder.Services.AddScoped<AuthService>();
 // builder.Services.AddScoped<SurveyService>();
@@ -113,6 +121,9 @@ app.MapAuthEndpoints();
 // TODO: Map these once AuthEndpoints.cs, SurveyEndpoints.cs, and UploadEndpoints.cs are created:
 // app.MapSurveyEndpoints();
 // app.MapUploadEndpoints();
+app.MapUploadEndpoints();
+app.MapAnnotationExportEndpoints();
+app.MapDatasetEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
