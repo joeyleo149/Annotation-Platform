@@ -13,6 +13,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SegmentResponse> SegmentResponses => Set<SegmentResponse>();
     public DbSet<QuestionAnswer> QuestionAnswers => Set<QuestionAnswer>();
     public DbSet<Question> Questions => Set<Question>();
+    public DbSet<AnnotatorSurvey> AnnotatorSurveys => Set<AnnotatorSurvey>();
     public DbSet<AnnotationTaskRequest>AnnotationTaskRequests =>Set<AnnotationTaskRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -184,6 +185,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         });
 
         modelBuilder.Entity<Question>();
+        modelBuilder.Entity<AnnotatorSurvey>(entity =>
+        {
+            entity.HasIndex(survey => survey.AnnotatorId).IsUnique();
+            entity.HasOne(survey => survey.Annotator)
+                .WithOne(annotator => annotator.Survey)
+                .HasForeignKey<AnnotatorSurvey>(survey => survey.AnnotatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     modelBuilder.Entity<AnnotationTaskRequest>(entity =>
 {
     entity.Property(request => request.Status)

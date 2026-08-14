@@ -126,6 +126,21 @@ export default function VideoAnnotatorPage() {
     setSegments([]);
   };
 
+  const handleUpdateSegment = async (id: string, updatedFields: Partial<Segment>) => {
+    const target = segments.find(segment => segment.id === id);
+    if (!target) return;
+    const updated = { ...target, ...updatedFields };
+    setSegments(previous => previous.map(segment => segment.id === id ? updated : segment));
+    if (!MOCK_MODE) {
+      try {
+        await updateSegment(Number(id), { annotationSessionId: sessionId, segmentNumber: 1,
+          startTime: secondsToTimeSpan(updated.startTime), endTime: secondsToTimeSpan(updated.endTime), transcript: updated.text });
+      } catch (error: unknown) {
+        setLoadError(error instanceof Error ? error.message : "Unable to update annotation.");
+      }
+    }
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-slate-50 flex flex-col">
       <div className="shrink-0 flex items-center justify-between px-6 py-3 border-b border-slate-200 bg-white">
@@ -169,14 +184,9 @@ export default function VideoAnnotatorPage() {
               sessionId={String(sessionId)}
               currentTime={currentTime}
               segments={segments}
-              onSetStart={() => undefined}
-              onSetEnd={() => undefined}
               onSeek={(t) => playerRef.current?.seekTo(t)}
               onSaveDraft={handleSaveDraft}
-              onEditSegment={(id) => {
-                const segment = segments.find((item) => item.id === id);
-                if (segment) playerRef.current?.seekTo(segment.startTime);
-              }}
+              onUpdateSegment={handleUpdateSegment}
               onDeleteSegment={handleDeleteSegment}
             />
           </div>
