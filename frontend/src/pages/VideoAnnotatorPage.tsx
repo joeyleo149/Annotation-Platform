@@ -23,6 +23,10 @@ const MOCK_SESSION = {
 
 const SINGLE_ANNOTATION_DURATION = 4;
 
+// TODO: real value once sessions can hold multiple videos — hardcoded true for now
+// since "Next Video" is a non-functional placeholder until that flow exists.
+const IS_LAST_VIDEO = true;
+
 export default function VideoAnnotatorPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = MOCK_MODE ? MOCK_SESSION.sessionId : Number(params.sessionId);
@@ -43,7 +47,7 @@ export default function VideoAnnotatorPage() {
       .then((rows) => {
         if (rows.length > 0) {
           setSegments(
-            rows.map((r: any) => ({
+            rows.map((r) => ({
               id: String(r.id),
               startTime: timeSpanToSeconds(r.startTime),
               endTime: timeSpanToSeconds(r.endTime),
@@ -56,13 +60,14 @@ export default function VideoAnnotatorPage() {
       .catch((e) => setLoadError(e.message));
   }, [sessionId]);
 
-  // Appends incoming text if an annotation already exists
+  // Appends composer text to the existing annotation, or creates the first one.
+  // This still writes immediately — it's a deliberate "new line" action, not a
+  // live-edit keystroke, so it's fine as-is (unlike the tile textarea, which
+  // now buffers locally until "Mark as Completed").
   const handleSaveDraft = async (newText: string) => {
     if (!newText.trim()) return;
 
     const existingTarget = segments[0];
-
-    // Combine previous text with new text (if segment exists)
     const combinedText = existingTarget?.text
       ? `${existingTarget.text.trim()} ${newText.trim()}`
       : newText.trim();
@@ -113,30 +118,34 @@ export default function VideoAnnotatorPage() {
     }
   };
 
-  // Handles direct inline updates (typing inside the tile's text area or changing times)
-  const handleUpdateSegment = async (id: string, updatedFields: Partial<Segment>) => {
+  // Single commit to the backend — called only from "Mark as Completed" in
+  // AnnotationControls, not on every keystroke. Fixes the per-character
+  // network-spam bug from the previous version.
+  const handleCompleteAnnotation = async (id: string, updated: Partial<Segment>) => {
     const target = segments.find((s) => s.id === id);
     if (!target) return;
 
-    const updatedSegment = { ...target, ...updatedFields };
+    const merged = { ...target, ...updated };
+    setSegments((prev) => prev.map((s) => (s.id === id ? merged : s)));
 
-    setSegments((prev) => prev.map((s) => (s.id === id ? updatedSegment : s)));
+    if (MOCK_MODE) return;
 
-    if (!MOCK_MODE) {
-      try {
-        await updateSegment(Number(id), {
-          annotationSessionId: sessionId,
-          segmentNumber: 1,
-          startTime: secondsToTimeSpan(updatedSegment.startTime),
-          endTime: secondsToTimeSpan(updatedSegment.endTime),
-          transcript: updatedSegment.text,
-        });
-      } catch (e: any) {
-        setLoadError(e.message);
-      }
+    try {
+      await updateSegment(Number(id), {
+        annotationSessionId: sessionId,
+        segmentNumber: 1,
+        startTime: secondsToTimeSpan(merged.startTime),
+        endTime: secondsToTimeSpan(merged.endTime),
+        transcript: merged.text,
+      });
+    } catch (e: any) {
+      setLoadError(e.message);
     }
   };
 
+  // Fixed: was unconditionally clearing every segment regardless of which
+  // delete button was clicked. Only coincidentally "worked" because the
+  // model currently guarantees a single segment.
   const handleDeleteSegment = async (id: string) => {
     if (!MOCK_MODE) {
       try {
@@ -146,7 +155,13 @@ export default function VideoAnnotatorPage() {
         return;
       }
     }
-    setSegments([]);
+    setSegments((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  // Placeholder — multi-video session flow isn't built yet. Button is
+  // disabled in AnnotationControls; this exists only so the prop is wired.
+  const handleNextVideo = () => {
+    console.log("Next video — not implemented yet.");
   };
 
   return (
@@ -169,11 +184,7 @@ export default function VideoAnnotatorPage() {
 
       <div className="flex flex-1 min-h-0">
         <div className="flex-1 min-h-0 min-w-0 overflow-hidden bg-black flex flex-col">
-          <VideoPlayer
-            ref={playerRef}
-            src={videoSrc}
-            onTimeUpdate={setCurrentTime}
-          />
+          <VideoPlayer ref={playerRef} src={videoSrc} onTimeUpdate={setCurrentTime} />
         </div>
 
         <aside className="w-[400px] border-l border-slate-200 bg-white flex flex-col min-h-0">
@@ -192,10 +203,12 @@ export default function VideoAnnotatorPage() {
               sessionId={String(sessionId)}
               currentTime={currentTime}
               segments={segments}
+              isLastVideo={IS_LAST_VIDEO}
               onSeek={(t) => playerRef.current?.seekTo(t)}
               onSaveDraft={handleSaveDraft}
-              onUpdateSegment={handleUpdateSegment}
+              onCompleteAnnotation={handleCompleteAnnotation}
               onDeleteSegment={handleDeleteSegment}
+              onNextVideo={handleNextVideo}
             />
           </div>
         </aside>
