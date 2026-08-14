@@ -19,7 +19,9 @@ function DashboardView({ title, description }: { title: string; description: str
 function RootRedirect() { const user = getCurrentUser(); return <Navigate to={user ? homeFor(user.role) : '/login'} replace />; }
 
 export default function App() {
-  return <BrowserRouter><Routes>
+  return <BrowserRouter>
+  <Routes>
+  {/* 
     <Route path="/" element={<RootRedirect />} /><Route path="/login" element={<LoginPage />} /><Route path="/register" element={<RegisterPage />} />
     <Route element={<ProtectedRoute role="Admin" />}>
       <Route path="/admin/upload" element={<DashboardView title="Upload Video" description="Upload and prepare a new video for annotation." />} />
@@ -33,6 +35,9 @@ export default function App() {
       <Route path="/annotator/profile" element={<DashboardView title="Profile" description="Manage your annotator account." />} />
       <Route path="/annotate/:sessionId" element={<VideoAnnotatorPage />} />
     </Route>
-    <Route path="*" element={<RootRedirect />} />
-  </Routes></BrowserRouter>;
+    <Route path="*" element={<RootRedirect />} /> */}
+
+    <Route path="/annotate/:sessionId" element={<VideoAnnotatorPage />} />
+  </Routes>
+  </BrowserRouter>;
 }
