@@ -10,6 +10,8 @@ public sealed class Annotator
     public required string Gender { get; set; }
     public required string Nationality { get; set; }
 
+
+    public bool HasCompletedSurvey { get; set; } = false;
     public ICollection<AnnotationSession> AnnotationSessions { get; set; } = [];
     public ICollection<AnnotationTaskRequest>
     AnnotationTaskRequests { get; set; } = [];
