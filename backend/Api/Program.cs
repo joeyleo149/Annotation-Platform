@@ -93,16 +93,32 @@ app.UseAuthorization();
 app.MapGet("/api/test", () => Results.Ok(new { message = "Backend connection successful!" }));
 
 // Existing endpoint mappings
-app.MapAdminEndpoints().RequireAuthorization(policy => policy.RequireRole("Admin"));
-app.MapAnnotatorEndpoints().RequireAuthorization();
-app.MapVideoEndpoints().RequireAuthorization();
-app.MapAnnotationSessionEndpoints().RequireAuthorization();
-app.MapSegmentResponseEndpoints().RequireAuthorization();
-app.MapQuestionAnswerEndpoints().RequireAuthorization();
+// app.MapAdminEndpoints().RequireAuthorization(policy => policy.RequireRole("Admin"));
+// app.MapAnnotatorEndpoints().RequireAuthorization();
+// app.MapVideoEndpoints().RequireAuthorization();
+// app.MapAnnotationSessionEndpoints().RequireAuthorization();
+// app.MapSegmentResponseEndpoints().RequireAuthorization();
+// app.MapQuestionAnswerEndpoints().RequireAuthorization();
+// app.MapAuthEndpoints();
+
+app.MapAdminEndpoints();
+app.MapAnnotatorEndpoints();
+app.MapVideoEndpoints();
+app.MapAnnotationSessionEndpoints();
+app.MapSegmentResponseEndpoints();
+app.MapQuestionAnswerEndpoints();
 app.MapAuthEndpoints();
+
 
 // TODO: Map these once AuthEndpoints.cs, SurveyEndpoints.cs, and UploadEndpoints.cs are created:
 // app.MapSurveyEndpoints();
 // app.MapUploadEndpoints();
+
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    dbContext.Database.Migrate(); // Auto-creates DB and applies pending migrations
+}
 
 app.Run();
