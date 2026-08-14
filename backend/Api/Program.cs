@@ -4,6 +4,7 @@ using Context.Entities;
 using Microsoft.EntityFrameworkCore;
 using Service;
 using Service.Services;
+using Api.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,11 +38,9 @@ builder.Services.AddScoped<IEntityService<QuestionAnswer>, QuestionAnswerService
 builder.Services.AddScoped<ManifestService>();
 builder.Services.AddScoped<VideoUploadService>();
 builder.Services.AddScoped<AnnotationAssignmentService>();
+builder.Services.AddScoped<AnnotationExportService>();
+builder.Services.AddHostedService<AssignmentExpirationWorker>();
 
-// TODO: Register these once the files are created in your project:
-// builder.Services.AddScoped<AuthService>();
-// builder.Services.AddScoped<SurveyService>();
-// builder.Services.AddScoped<VideoUploadService>();
 
 var app = builder.Build();
 
@@ -66,9 +65,6 @@ app.MapAnnotationSessionEndpoints();
 app.MapSegmentResponseEndpoints();
 app.MapQuestionAnswerEndpoints();
 app.MapUploadEndpoints();
-// TODO: Map these once AuthEndpoints.cs, SurveyEndpoints.cs, and UploadEndpoints.cs are created:
-// app.MapAuthEndpoints();
-// app.MapSurveyEndpoints();
-// app.MapUploadEndpoints();
+app.MapAnnotationExportEndpoints();
 
 app.Run();

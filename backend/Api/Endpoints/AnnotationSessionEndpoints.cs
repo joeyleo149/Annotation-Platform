@@ -35,6 +35,9 @@ public static class AnnotationSessionEndpoints
         group.MapPost(
             "/assign-next",
             AssignNextAsync);
+        group.MapPost(
+            "/process-expired",
+            ProcessExpiredAsync);
 
         return group;
     }
@@ -186,6 +189,36 @@ public static class AnnotationSessionEndpoints
             });
         }
     }
+private static async Task<IResult> ProcessExpiredAsync(
+    AnnotationAssignmentService assignmentService,
+    IConfiguration configuration,
+    CancellationToken cancellationToken)
+{
+    var durationMinutes =
+        configuration.GetValue<int>(
+            "AssignmentProcessing:" +
+            "DefaultAssignmentDurationMinutes",
+            30);
+
+    try
+    {
+        var result =
+            await assignmentService
+                .ProcessExpiredAssignmentsAsync(
+                    durationMinutes,
+                    cancellationToken);
+
+        return Results.Ok(result);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new
+        {
+            message = exception.Message
+        });
+    }
+}
+
 }
 
 public sealed record CreateTaskRequest(

@@ -329,8 +329,8 @@ public sealed class AnnotationAssignmentService(
     {
         return await context.AnnotationSessions
             .AsNoTracking()
-            .OrderByDescending(session =>
-                session.AssignedAt)
+            .OrderByDescending(
+                session => session.AssignedAt)
             .Select(session => new SessionResult(
                 session.Id,
                 session.AnnotatorId,
@@ -363,6 +363,81 @@ public sealed class AnnotationAssignmentService(
                 session.CancelledAt))
             .SingleOrDefaultAsync(cancellationToken);
     }
+
+    public async Task<ExpirationProcessingResult>
+        ProcessExpiredAssignmentsAsync(
+            int reassignmentDurationMinutes,
+            CancellationToken cancellationToken = default)
+    {
+        if (reassignmentDurationMinutes <= 0 ||
+            reassignmentDurationMinutes > 1440)
+        {
+            throw new ArgumentException(
+                "Reassignment duration must be between " +
+                "1 and 1440 minutes.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        var expiredSessions =
+            await context.AnnotationSessions
+                .Include(session => session.Video)
+                .Where(session =>
+                    (session.Status ==
+                        AnnotationSessionStatus.Assigned ||
+                     session.Status ==
+                        AnnotationSessionStatus.InProgress) &&
+                    session.ExpiresAt <= now)
+                .ToListAsync(cancellationToken);
+
+        foreach (var session in expiredSessions)
+        {
+            session.Status =
+                AnnotationSessionStatus.Expired;
+        }
+
+        await context.SaveChangesAsync(
+            cancellationToken);
+
+        var assignmentOutcomes =
+            new List<AssignmentOutcome>();
+
+        var expiredByDataset = expiredSessions
+            .Where(session =>
+                session.Video.DatasetId.HasValue)
+            .GroupBy(session =>
+                session.Video.DatasetId!.Value);
+
+        foreach (var datasetGroup in expiredByDataset)
+        {
+            var expiredSlotCount =
+                datasetGroup.Count();
+
+            for (var index = 0;
+                 index < expiredSlotCount;
+                 index++)
+            {
+                var outcome = await AssignNextAsync(
+                    datasetGroup.Key,
+                    reassignmentDurationMinutes,
+                    cancellationToken);
+
+                assignmentOutcomes.Add(outcome);
+
+                if (!outcome.Assigned)
+                {
+                    break;
+                }
+            }
+        }
+
+        return new ExpirationProcessingResult(
+            expiredSessions.Count,
+            assignmentOutcomes.Count(
+                outcome => outcome.Assigned),
+            now,
+            assignmentOutcomes);
+    }
 }
 
 public sealed record TaskRequestResult(
@@ -394,6 +469,13 @@ public sealed record SessionResult(
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
     DateTimeOffset? CancelledAt);
+
+public sealed record ExpirationProcessingResult(
+    int ExpiredSessionCount,
+    int ReassignedSessionCount,
+    DateTimeOffset ProcessedAt,
+    IReadOnlyList<AssignmentOutcome>
+        AssignmentOutcomes);
 
 public sealed class TaskRequestConflictException
     : Exception
