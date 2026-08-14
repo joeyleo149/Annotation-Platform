@@ -11,7 +11,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AnnotationSession> AnnotationSessions => Set<AnnotationSession>();
     public DbSet<SegmentResponse> SegmentResponses => Set<SegmentResponse>();
     public DbSet<QuestionAnswer> QuestionAnswers => Set<QuestionAnswer>();
-
+    public DbSet<Question> Questions => Set<Question>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Admin>(entity =>
@@ -54,5 +54,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Answer).HasColumnType("nvarchar(max)");
             entity.HasOne(x => x.SegmentResponse).WithMany(x => x.QuestionAnswers).HasForeignKey(x => x.SegmentResponseId);
         });
+
+        modelBuilder.Entity<Question>();
     }
 }

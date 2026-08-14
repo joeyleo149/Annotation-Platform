@@ -35,6 +35,8 @@ builder.Services.AddScoped<IEntityService<AnnotationSession>, AnnotationSessionS
 builder.Services.AddScoped<IEntityService<SegmentResponse>, SegmentResponseService>();
 builder.Services.AddScoped<IEntityService<QuestionAnswer>, QuestionAnswerService>();
 
+builder.Services.AddScoped<IEntityService<Question>, QuestionService>();
+
 // TODO: Register these once the files are created in your project:
 // builder.Services.AddScoped<AuthService>();
 // builder.Services.AddScoped<SurveyService>();
@@ -62,6 +64,7 @@ app.MapVideoEndpoints();
 app.MapAnnotationSessionEndpoints();
 app.MapSegmentResponseEndpoints();
 app.MapQuestionAnswerEndpoints();
+app.MapQuestionEndpoints();
 
 // TODO: Map these once AuthEndpoints.cs, SurveyEndpoints.cs, and UploadEndpoints.cs are created:
 // app.MapAuthEndpoints();
