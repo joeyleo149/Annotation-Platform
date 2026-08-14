@@ -4,6 +4,7 @@ using Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Context.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260813164033_AddDatasetQuotaAndSessionLifecycle")]
+    partial class AddDatasetQuotaAndSessionLifecycle
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -38,8 +41,7 @@ namespace Context.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)")
-                        .HasColumnName("Username");
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -49,9 +51,6 @@ namespace Context.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.HasIndex("Name")
                         .IsUnique();
 
                     b.ToTable("Admins");
@@ -109,59 +108,6 @@ namespace Context.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Context.Entities.AnnotationTaskRequest", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("AnnotationSessionId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("AnnotatorId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTimeOffset?>("CancelledAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<int>("DatasetId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTimeOffset?>("FulfilledAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<DateTimeOffset>("RequestedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
-                        .HasDefaultValue("Waiting");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AnnotationSessionId")
-                        .IsUnique()
-                        .HasFilter("[AnnotationSessionId] IS NOT NULL");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("AnnotatorId", "DatasetId", "Status")
-                        .IsUnique()
-                        .HasFilter("[Status] = 'Waiting'");
-
-                    b.HasIndex("DatasetId", "Status", "RequestedAt");
-
-                    b.ToTable("AnnotationTaskRequests", t =>
-                        {
-                            t.HasCheckConstraint("CK_AnnotationTaskRequests_Status", "[Status] IN ('Waiting', 'Fulfilled', 'Cancelled')");
-                        });
-                });
-
             modelBuilder.Entity("Context.Entities.Annotator", b =>
                 {
                     b.Property<int>("Id")
@@ -186,8 +132,7 @@ namespace Context.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)")
-                        .HasColumnName("Username");
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Nationality")
                         .IsRequired()
@@ -204,30 +149,7 @@ namespace Context.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.HasIndex("Name")
-                        .IsUnique();
-
                     b.ToTable("Annotators");
-                });
-
-            modelBuilder.Entity("Context.Entities.Question", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("QuestionNumber")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Questions");
                 });
 
             modelBuilder.Entity("Context.Entities.Dataset", b =>
@@ -273,8 +195,7 @@ namespace Context.Migrations
 
                     b.HasIndex("IsArchived");
 
-                    b.HasIndex("Name")
-                        .IsUnique();
+                    b.HasIndex("Name");
 
                     b.ToTable("Datasets");
                 });
@@ -307,14 +228,8 @@ namespace Context.Migrations
                     b.Property<int>("AnnotationSessionId")
                         .HasColumnType("int");
 
-                    b.Property<TimeSpan>("EndTime")
-                        .HasColumnType("time");
-
                     b.Property<int>("SegmentNumber")
                         .HasColumnType("int");
-
-                    b.Property<TimeSpan>("StartTime")
-                        .HasColumnType("time");
 
                     b.Property<DateTimeOffset>("SubmittedAt")
                         .HasColumnType("datetimeoffset");
@@ -431,15 +346,16 @@ namespace Context.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DatasetId");
+
+                    b.HasIndex("FileName")
+                        .IsUnique();
+
                     b.HasIndex("IsArchived");
 
                     b.HasIndex("ScenarioId");
 
                     b.HasIndex("UploadedByAdminId");
-
-                    b.HasIndex("DatasetId", "FileName")
-                        .IsUnique()
-                        .HasFilter("[DatasetId] IS NOT NULL");
 
                     b.HasIndex("IsArchived", "ProcessingStatus");
 
@@ -466,32 +382,6 @@ namespace Context.Migrations
                     b.Navigation("Annotator");
 
                     b.Navigation("Video");
-                });
-
-            modelBuilder.Entity("Context.Entities.AnnotationTaskRequest", b =>
-                {
-                    b.HasOne("Context.Entities.AnnotationSession", "AnnotationSession")
-                        .WithOne()
-                        .HasForeignKey("Context.Entities.AnnotationTaskRequest", "AnnotationSessionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Context.Entities.Annotator", "Annotator")
-                        .WithMany("AnnotationTaskRequests")
-                        .HasForeignKey("AnnotatorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Context.Entities.Dataset", "Dataset")
-                        .WithMany("AnnotationTaskRequests")
-                        .HasForeignKey("DatasetId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AnnotationSession");
-
-                    b.Navigation("Annotator");
-
-                    b.Navigation("Dataset");
                 });
 
             modelBuilder.Entity("Context.Entities.QuestionAnswer", b =>
@@ -547,14 +437,10 @@ namespace Context.Migrations
             modelBuilder.Entity("Context.Entities.Annotator", b =>
                 {
                     b.Navigation("AnnotationSessions");
-
-                    b.Navigation("AnnotationTaskRequests");
                 });
 
             modelBuilder.Entity("Context.Entities.Dataset", b =>
                 {
-                    b.Navigation("AnnotationTaskRequests");
-
                     b.Navigation("Videos");
                 });
 

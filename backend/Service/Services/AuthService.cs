@@ -49,6 +49,28 @@ public sealed class AuthService(AppDbContext context)
         return RegisterResult.Success;
     }
 
+    public async Task<CreateAdminResult> CreateAdminAsync(CreateAdminUser request, CancellationToken ct)
+    {
+        var username = request.Username.Trim();
+        if (await context.Admins.AnyAsync(x => x.Name == username, ct) ||
+            await context.Annotators.AnyAsync(x => x.Name == username, ct))
+            return CreateAdminResult.DuplicateUsername;
+
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (await context.Admins.AnyAsync(x => x.Email == email, ct) ||
+            await context.Annotators.AnyAsync(x => x.Email == email, ct))
+            return CreateAdminResult.DuplicateEmail;
+
+        context.Admins.Add(new Admin
+        {
+            Name = username,
+            Email = email,
+            PasswordHash = HashPassword(request.Password)
+        });
+        await context.SaveChangesAsync(ct);
+        return CreateAdminResult.Success;
+    }
+
     public static bool IsStrongPassword(string password) =>
         password.Length >= 8 && password.Any(char.IsUpper) && password.Any(char.IsLower) &&
         password.Any(char.IsDigit) && password.Any(c => !char.IsLetterOrDigit(c));
@@ -77,4 +99,6 @@ public sealed class AuthService(AppDbContext context)
 
 public sealed record AuthUser(int Id, string Username, string Email, string Role);
 public sealed record RegisterUser(string Username, string Email, string Password, string Gender, string Nationality, DateOnly DateOfBirth);
+public sealed record CreateAdminUser(string Username, string Email, string Password);
 public enum RegisterResult { Success, DuplicateUsername, DuplicateEmail }
+public enum CreateAdminResult { Success, DuplicateUsername, DuplicateEmail }

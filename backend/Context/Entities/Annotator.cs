@@ -11,4 +11,6 @@ public sealed class Annotator
     public required string Nationality { get; set; }
 
     public ICollection<AnnotationSession> AnnotationSessions { get; set; } = [];
+    public ICollection<AnnotationTaskRequest>
+    AnnotationTaskRequests { get; set; } = [];
 }

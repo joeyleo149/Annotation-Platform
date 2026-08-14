@@ -105,4 +105,11 @@ app.MapAuthEndpoints();
 // app.MapSurveyEndpoints();
 // app.MapUploadEndpoints();
 
+if (app.Environment.IsDevelopment())
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
+
 app.Run();

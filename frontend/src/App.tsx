@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VideoAnnotatorPage from './pages/VideoAnnotatorPage';
+import AddAdminPage from './pages/AddAdminPage';
 import VerticalNav from './components/VerticalNav';
 import { getCurrentUser, homeFor, type Role } from './services/authService';
 
@@ -25,7 +26,7 @@ export default function App() {
       <Route path="/admin/upload" element={<DashboardView title="Upload Video" description="Upload and prepare a new video for annotation." />} />
       <Route path="/admin/videos" element={<DashboardView title="Uploaded Videos" description="Review videos available to annotators." />} />
       <Route path="/admin/profile" element={<DashboardView title="Profile" description="Manage your administrator account." />} />
-      <Route path="/admin/add-admin" element={<DashboardView title="Add Admin" description="Create another administrator account." />} />
+      <Route path="/admin/add-admin" element={<AddAdminPage />} />
     </Route>
     <Route element={<ProtectedRoute role="Annotator" />}>
       <Route path="/annotator/videos" element={<DashboardView title="Get a Video" description="Choose your next available annotation task." />} />

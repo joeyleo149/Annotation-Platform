@@ -13,8 +13,11 @@ async function handleResponse(response: Response) {
   }
 
   if (!response.ok) {
-    const message = typeof data === 'object' && data !== null && 'message' in data && typeof data.message === 'string'
-      ? data.message
+    const message = typeof data === 'object' && data !== null
+      ? ('message' in data && typeof data.message === 'string' ? data.message
+        : 'error' in data && typeof data.error === 'string' ? data.error
+        : 'title' in data && typeof data.title === 'string' ? data.title
+        : response.statusText)
       : response.statusText;
     const error = new Error(message);
     throw error;
