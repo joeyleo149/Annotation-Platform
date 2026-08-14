@@ -232,6 +232,12 @@ namespace Context.Migrations
 
             modelBuilder.Entity("Context.Entities.Dataset", b =>
                 {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
                     b.Property<DateTimeOffset?>("ArchivedAt")
                         .HasColumnType("datetimeoffset");
 
