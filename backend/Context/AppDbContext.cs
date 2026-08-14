@@ -16,19 +16,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     {
         modelBuilder.Entity<Admin>(entity =>
         {
-            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.Name).HasColumnName("Username").HasMaxLength(200);
             entity.Property(x => x.Email).HasMaxLength(320);
             entity.Property(x => x.PasswordHash).HasMaxLength(500);
             entity.HasIndex(x => x.Email).IsUnique();
+            entity.HasIndex(x => x.Name).IsUnique();
         });
         modelBuilder.Entity<Annotator>(entity =>
         {
-            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.Name).HasColumnName("Username").HasMaxLength(200);
             entity.Property(x => x.Email).HasMaxLength(320);
             entity.Property(x => x.PasswordHash).HasMaxLength(500);
             entity.Property(x => x.Gender).HasMaxLength(50);
             entity.Property(x => x.Nationality).HasMaxLength(100);
             entity.HasIndex(x => x.Email).IsUnique();
+            entity.HasIndex(x => x.Name).IsUnique();
         });
         modelBuilder.Entity<Video>(entity =>
         {
