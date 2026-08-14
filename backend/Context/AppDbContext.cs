@@ -12,25 +12,28 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AnnotationSession> AnnotationSessions => Set<AnnotationSession>();
     public DbSet<SegmentResponse> SegmentResponses => Set<SegmentResponse>();
     public DbSet<QuestionAnswer> QuestionAnswers => Set<QuestionAnswer>();
+    public DbSet<Question> Questions => Set<Question>();
     public DbSet<AnnotationTaskRequest>AnnotationTaskRequests =>Set<AnnotationTaskRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Admin>(entity =>
         {
-            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.Name).HasColumnName("Username").HasMaxLength(200);
             entity.Property(x => x.Email).HasMaxLength(320);
             entity.Property(x => x.PasswordHash).HasMaxLength(500);
             entity.HasIndex(x => x.Email).IsUnique();
+            entity.HasIndex(x => x.Name).IsUnique();
         });
         modelBuilder.Entity<Annotator>(entity =>
         {
-            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.Name).HasColumnName("Username").HasMaxLength(200);
             entity.Property(x => x.Email).HasMaxLength(320);
             entity.Property(x => x.PasswordHash).HasMaxLength(500);
             entity.Property(x => x.Gender).HasMaxLength(50);
             entity.Property(x => x.Nationality).HasMaxLength(100);
             entity.HasIndex(x => x.Email).IsUnique();
+            entity.HasIndex(x => x.Name).IsUnique();
         });
         modelBuilder.Entity<Dataset>(entity =>
 {
@@ -180,6 +183,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne(x => x.SegmentResponse).WithMany(x => x.QuestionAnswers).HasForeignKey(x => x.SegmentResponseId);
         });
 
+        modelBuilder.Entity<Question>();
     modelBuilder.Entity<AnnotationTaskRequest>(entity =>
 {
     entity.Property(request => request.Status)

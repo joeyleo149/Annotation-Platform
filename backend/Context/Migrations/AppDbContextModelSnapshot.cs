@@ -38,7 +38,8 @@ namespace Context.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("Username");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -48,6 +49,9 @@ namespace Context.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("Name")
                         .IsUnique();
 
                     b.ToTable("Admins");
@@ -182,7 +186,8 @@ namespace Context.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("Username");
 
                     b.Property<string>("Nationality")
                         .IsRequired()
@@ -199,9 +204,13 @@ namespace Context.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
+                    b.HasIndex("Name")
+                        .IsUnique();
+
                     b.ToTable("Annotators");
                 });
 
+            modelBuilder.Entity("Context.Entities.Question", b =>
             modelBuilder.Entity("Context.Entities.Dataset", b =>
                 {
                     b.Property<int>("Id")
@@ -210,6 +219,16 @@ namespace Context.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("QuestionNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Questions");
                     b.Property<DateTimeOffset?>("ArchivedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -279,8 +298,14 @@ namespace Context.Migrations
                     b.Property<int>("AnnotationSessionId")
                         .HasColumnType("int");
 
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("time");
+
                     b.Property<int>("SegmentNumber")
                         .HasColumnType("int");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("time");
 
                     b.Property<DateTimeOffset>("SubmittedAt")
                         .HasColumnType("datetimeoffset");

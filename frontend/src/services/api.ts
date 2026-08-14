@@ -3,14 +3,29 @@ const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 async function handleResponse(response: Response) {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: response.ok ? text : 'The server encountered an error. Check the API logs for details.' };
+    }
+  }
 
   if (!response.ok) {
-    const error = new Error(data?.message ?? response.statusText);
+    const message = typeof data === 'object' && data !== null && 'message' in data && typeof data.message === 'string'
+      ? data.message
+      : response.statusText;
+    const error = new Error(message);
     throw error;
   }
 
   return data;
+}
+
+function headers() {
+  const token = localStorage.getItem('annotate_pro_token');
+  return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 
 const api = {
@@ -20,9 +35,7 @@ const api = {
     
     const response = await fetch(url, {
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: headers(),
     });
 
     return { data: await handleResponse(response) };
@@ -34,9 +47,7 @@ const api = {
     const response = await fetch(url, {
       method: 'POST',
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: headers(),
       body: body ? JSON.stringify(body) : undefined,
     });
 
