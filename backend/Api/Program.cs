@@ -70,6 +70,8 @@ builder.Services.AddScoped<AnnotationExportService>();
 builder.Services.AddHostedService<AssignmentExpirationWorker>();
 builder.Services.AddScoped<ArchiveService>();
 builder.Services.AddHostedService<DatasetArchiveWorker>();
+builder.Services.AddHttpClient();
+
 
 builder.Services.AddScoped<AuthService>();
 // builder.Services.AddScoped<SurveyService>();
@@ -117,6 +119,7 @@ app.MapSegmentResponseEndpoints();
 app.MapQuestionAnswerEndpoints();
 app.MapAuthEndpoints();
 
+app.MapTranscriptionEndpoints();
 
 // TODO: Map these once AuthEndpoints.cs, SurveyEndpoints.cs, and UploadEndpoints.cs are created:
 // app.MapSurveyEndpoints();

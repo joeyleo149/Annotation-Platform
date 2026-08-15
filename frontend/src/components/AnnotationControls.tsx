@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { FileText, HelpCircle, Trash2, Send, Mic, Play, Check, ChevronRight } from "lucide-react";
+import { FileText, HelpCircle, Trash2, Send, Mic, MicOff, Play, Check, ChevronRight } from "lucide-react";
 
 export interface Segment {
   id: string;
@@ -41,10 +41,12 @@ function AutoResizingTextarea({
   value,
   onChange,
   className,
+  disabled = false,
 }: {
   value: string;
   onChange: (val: string) => void;
   className?: string;
+  disabled?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -64,6 +66,7 @@ function AutoResizingTextarea({
       ref={textareaRef}
       rows={1}
       value={value}
+      disabled={disabled}
       onChange={(e) => {
         onChange(e.target.value);
         adjustHeight();
@@ -74,8 +77,7 @@ function AutoResizingTextarea({
 }
 
 // Local, unsaved edit state for a segment tile. Nothing here hits the backend
-// until "Mark as Completed" is clicked — fixes both the per-keystroke network
-// spam bug and the stale-defaultValue bug from controlling these fields locally.
+// until "Mark as Completed" is clicked.
 interface LocalDraft {
   text: string;
   startTime: number;
@@ -96,26 +98,115 @@ export default function AnnotationControls({
   const [draftText, setDraftText] = useState("");
   const [localEdits, setLocalEdits] = useState<Record<string, LocalDraft>>({});
   const [justCompleted, setJustCompleted] = useState<string | null>(null);
+  const [isMarkedCompleted, setIsMarkedCompleted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-  // Seed local edit state only when a segment first appears (new id) —
-  // don't clobber in-progress local edits on every parent re-render.
+  // Tracks the last-seen parent values per segment id, separately from the
+  // user's local draft. This is what makes it possible to tell "the parent
+  // changed this externally (e.g. composer appended text)" apart from
+  // "the user is mid-edit in this tile" — both look like localEdits !==
+  // segments[i] otherwise, which was the bug: external updates (composer
+  // append) were indistinguishable from stale-but-untouched cache, so
+  // neither case ever resynced once an id existed.
+  const lastSyncedRef = useRef<Record<string, LocalDraft>>({});
+
   useEffect(() => {
     setLocalEdits((prev) => {
       const next = { ...prev };
       for (const seg of segments) {
-        if (!(seg.id in next)) {
+        const lastSynced = lastSyncedRef.current[seg.id];
+        const current = next[seg.id];
+
+        const isNew = !lastSynced;
+        const wasClean =
+          current &&
+          lastSynced &&
+          current.text === lastSynced.text &&
+          current.startTime === lastSynced.startTime &&
+          current.endTime === lastSynced.endTime;
+        const parentChanged =
+          !lastSynced ||
+          lastSynced.text !== seg.text ||
+          lastSynced.startTime !== seg.startTime ||
+          lastSynced.endTime !== seg.endTime;
+
+        // Resync when: brand new segment, or the parent changed AND the
+        // user has no unsaved local edits pending (wasClean). If the user
+        // is actively mid-edit (dirty), don't clobber their in-progress
+        // text — the external change will apply next time they're clean.
+        if (isNew || (parentChanged && wasClean)) {
           next[seg.id] = { text: seg.text, startTime: seg.startTime, endTime: seg.endTime };
         }
+
+        lastSyncedRef.current[seg.id] = { text: seg.text, startTime: seg.startTime, endTime: seg.endTime };
       }
       return next;
     });
   }, [segments]);
 
   const handleSubmitDraft = () => {
-    if (!draftText.trim()) return;
+    if (isMarkedCompleted || !draftText.trim()) return;
     onSaveDraft(draftText.trim());
     setDraftText("");
   };
+
+  const toggleDictation = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    setMicError(null);
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setMicError("Microphone access failed or was denied.");
+      return;
+    }
+
+    const recorder = new MediaRecorder(stream);
+    audioChunksRef.current = [];
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((track) => track.stop());
+      setIsRecording(false);
+      setIsTranscribing(true);
+
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.webm");
+
+      try {
+        const res = await fetch("/api/transcribe", { method: "POST", body: formData });
+        if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
+        const { text } = await res.json();
+        setDraftText((prev) => (prev ? prev + " " : "") + text);
+      } catch (e: any) {
+        setMicError(e.message ?? "Transcription failed.");
+      } finally {
+        setIsTranscribing(false);
+      }
+    };
+
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setIsRecording(true);
+  };
+
+  // Stop any in-progress recording if the component unmounts mid-recording.
+  useEffect(() => {
+    return () => mediaRecorderRef.current?.stop();
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -125,6 +216,7 @@ export default function AnnotationControls({
   };
 
   const updateLocal = (id: string, fields: Partial<LocalDraft>) => {
+    if (isMarkedCompleted) return;
     setLocalEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...fields } }));
     setJustCompleted(null);
   };
@@ -136,10 +228,46 @@ export default function AnnotationControls({
     setJustCompleted(id);
   };
 
+  const completionText = segments[0] ? (localEdits[segments[0].id]?.text ?? segments[0].text ?? "") : "";
+
+  const toggleCompleteState = () => {
+    if (isMarkedCompleted) {
+      setIsMarkedCompleted(false);
+      setJustCompleted(null);
+      return;
+    }
+
+    const firstSegment = segments[0];
+    if (!firstSegment || !completionText.trim()) return;
+
+    handleComplete(firstSegment.id);
+    setIsMarkedCompleted(true);
+  };
+
+  const isDirtyFor = (seg: Segment) => {
+    const draft = localEdits[seg.id];
+    if (!draft) return false;
+    return draft.text !== seg.text || draft.startTime !== seg.startTime || draft.endTime !== seg.endTime;
+  };
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Top bar — session nav, placeholder until multi-video flow is wired */}
+      {/* Top bar — Mark as Completed (left), session nav (right, placeholder) */}
       <div className="flex items-center justify-end gap-2 mb-3">
+        <button
+          onClick={toggleCompleteState}
+          disabled={!isMarkedCompleted && !completionText.trim()}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            isMarkedCompleted
+              ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
+              : "bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-white"
+          }`}
+        >
+          <Check size={14} />
+          {isMarkedCompleted || (segments[0] && justCompleted === segments[0].id && !isDirtyFor(segments[0]))
+            ? "Saved"
+            : "Mark as Completed"}
+        </button>
         <button
           onClick={onNextVideo}
           disabled
@@ -183,8 +311,6 @@ export default function AnnotationControls({
           ) : (
             segments.map((seg) => {
               const draft = localEdits[seg.id] ?? { text: seg.text, startTime: seg.startTime, endTime: seg.endTime };
-              const isDirty =
-                draft.text !== seg.text || draft.startTime !== seg.startTime || draft.endTime !== seg.endTime;
 
               return (
                 <div
@@ -217,17 +343,6 @@ export default function AnnotationControls({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {isDirty && (
-                        <button
-                          onClick={() => handleComplete(seg.id)}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
-                        >
-                          <Check size={12} /> Mark as Completed
-                        </button>
-                      )}
-                      {!isDirty && justCompleted === seg.id && (
-                        <span className="text-xs text-green-600 font-medium">Saved</span>
-                      )}
                       <button
                         onClick={() => onDeleteSegment(seg.id)}
                         className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -240,8 +355,9 @@ export default function AnnotationControls({
 
                   <AutoResizingTextarea
                     value={draft.text}
+                    disabled={isMarkedCompleted}
                     onChange={(text) => updateLocal(seg.id, { text })}
-                    className="text-sm text-slate-700 bg-slate-50/60 hover:bg-slate-50 focus:bg-white border border-transparent hover:border-slate-200 focus:border-blue-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed transition-all"
+                    className="text-sm text-slate-700 bg-slate-50/60 hover:bg-slate-50 focus:bg-white border border-transparent hover:border-slate-200 focus:border-blue-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed transition-all disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                   />
 
                   {seg.labels.length > 0 && (
@@ -269,15 +385,31 @@ export default function AnnotationControls({
         <div className="relative">
           <textarea
             value={draftText}
-            onChange={(e) => setDraftText(e.target.value)}
+            disabled={isMarkedCompleted}
+            onChange={(e) => {
+              if (isMarkedCompleted) return;
+              setDraftText(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
-            placeholder="Type new transcription segment here..."
+            placeholder={isMarkedCompleted ? "Completed — click the button to resume editing." : "Type new transcription segment here..."}
             rows={2}
-            className="w-full resize-none rounded-lg border border-slate-200 bg-white p-3 pr-16 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            className="w-full resize-none rounded-lg border border-slate-200 bg-white p-3 pr-16 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
           />
           <div className="absolute right-2 bottom-2 flex items-center gap-1">
-            <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Dictate">
-              <Mic size={16} />
+            <button
+              onClick={toggleDictation}
+              disabled={isTranscribing}
+              className={`p-1.5 rounded-lg transition-colors ${
+                isRecording
+                  ? "text-white bg-red-500 hover:bg-red-600"
+                  : isTranscribing
+                  ? "text-slate-300 cursor-wait"
+                  : "text-slate-400 hover:text-slate-600"
+              }`}
+              aria-label={isRecording ? "Stop recording" : "Dictate"}
+              title={isRecording ? "Stop recording" : "Describe the video by speaking"}
+            >
+              {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
             <button
               onClick={handleSubmitDraft}
@@ -289,8 +421,13 @@ export default function AnnotationControls({
           </div>
         </div>
         <p className="text-xs text-slate-400 mt-1 font-mono">
-          Current time: {currentTime.toFixed(2)}s — Press Enter to submit segment.
+          {isRecording
+            ? "Recording... click the mic to stop and transcribe."
+            : isTranscribing
+            ? "Transcribing..."
+            : "Current time: " + currentTime.toFixed(2) + "s — Press Enter to submit segment."}
         </p>
+        {micError && <p className="text-xs text-red-600 mt-1">{micError}</p>}
       </div>
     </div>
   );

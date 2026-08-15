@@ -19,6 +19,7 @@ not treated as an error.
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -36,10 +37,28 @@ def seconds_to_timespan(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+def get_ffmpeg_path() -> str:
+    """Resolves ffmpeg from the venv-bundled imageio-ffmpeg package —
+    no system-wide install or PATH edit required. Downloads the static
+    binary into the package cache on first use if not already present."""
+    import imageio_ffmpeg
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def ensure_ffmpeg_on_path() -> None:
+    """Whisper's own transcribe() internally shells out to a bare 'ffmpeg'
+    command (not a path we control) to decode audio. Prepending the
+    venv-bundled binary's folder to PATH — for this process only, not
+    system-wide — makes Whisper's internal call find it too."""
+    ffmpeg_dir = str(Path(get_ffmpeg_path()).parent)
+    os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+
+
 def extract_audio(video_path: Path, out_wav: Path) -> None:
-    """Extracts mono 16kHz audio via ffmpeg — Whisper's preferred input format."""
+    """Extracts mono 16kHz audio via the venv-bundled ffmpeg — Whisper's preferred input format."""
+    ffmpeg_path = get_ffmpeg_path()
     cmd = [
-        "ffmpeg", "-y",
+        ffmpeg_path, "-y",
         "-i", str(video_path),
         "-vn",
         "-ac", "1",
@@ -95,6 +114,8 @@ def main():
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         audio_path = Path(tmp_dir) / "audio.wav"
+
+        ensure_ffmpeg_on_path()
 
         print(f"Extracting audio from {args.video} ...")
         extract_audio(args.video, audio_path)
