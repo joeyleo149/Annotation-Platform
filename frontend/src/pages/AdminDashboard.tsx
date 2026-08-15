@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
+import { useNavigate } from 'react-router';
 
 import {
   adminApi,
@@ -16,6 +17,7 @@ import {
 } from '../services/adminApi';
 
 import './AdminDashboard.css';
+import { getCurrentUser, logout } from '../services/authService';
 
 type DashboardView =
   | 'overview'
@@ -67,6 +69,8 @@ function getErrorMessage(error: unknown): string {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const currentUser = getCurrentUser();
   const [view, setView] =
     useState<DashboardView>('overview');
 
@@ -1311,11 +1315,14 @@ export default function AdminDashboard() {
         </nav>
 
         <div className="sidebar-footer">
-          <span className="avatar admin">RA</span>
-          <div>
-            <strong>Rozaline Admin</strong>
+          <span className="avatar admin">{currentUser?.email.slice(0, 2).toUpperCase() ?? 'AD'}</span>
+          <div className="admin-identity">
+            <strong>{currentUser?.email ?? 'Administrator'}</strong>
             <small>Administrator</small>
           </div>
+          <button className="admin-logout" type="button" onClick={() => { logout(); navigate('/login', { replace: true }); }} aria-label="Log out">
+            Log out
+          </button>
         </div>
       </aside>
 

@@ -18,6 +18,13 @@ function ProtectedRoute({ role }: { role: Role }) {
   return <div className="app-shell"><VerticalNav role={user.role} /><main className="dashboard-content"><Outlet /></main></div>;
 }
 
+function BareProtectedRoute({ role }: { role: Role }) {
+  const user = getCurrentUser();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== role) return <Navigate to={homeFor(user.role)} replace />;
+  return <Outlet />;
+}
+
 function SurveyGate() {
   const location = useLocation();
   const [completed, setCompleted] = useState<boolean | null>(null);
@@ -37,8 +44,10 @@ export default function App() {
     <Route path="/" element={<RootRedirect />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
-    <Route element={<ProtectedRoute role="Admin" />}>
+    <Route element={<BareProtectedRoute role="Admin" />}>
       <Route path="/admin/upload" element={<AdminDashboard />} />
+    </Route>
+    <Route element={<ProtectedRoute role="Admin" />}>
       <Route path="/admin/videos" element={<Placeholder title="Uploaded Videos" description="Review videos available to annotators." />} />
       <Route path="/admin/profile" element={<Placeholder title="Profile" description="Manage your administrator account." />} />
       <Route path="/admin/add-admin" element={<AddAdminPage />} />
