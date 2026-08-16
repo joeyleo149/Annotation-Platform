@@ -50,6 +50,9 @@ public sealed class VideoService(AppDbContext context)
                 video.ManifestMatched,
                 video.ScenarioType,
                 video.DrivingInstruction,
+                video.TrajectoryJson,
+                video.ActionsJson,
+                video.OriginalReasoningJson,
                 video.RequiredAnnotationCount,
                 context.AnnotationSessions.Count(
                     session =>
@@ -106,6 +109,9 @@ public sealed class VideoService(AppDbContext context)
                 video.ManifestMatched,
                 video.ScenarioType,
                 video.DrivingInstruction,
+                video.TrajectoryJson,
+                video.ActionsJson,
+                video.OriginalReasoningJson,
                 video.RequiredAnnotationCount,
                 context.AnnotationSessions.Count(
                     session =>
@@ -413,6 +419,9 @@ public sealed record VideoCatalogItem(
     bool ManifestMatched,
     string? ScenarioType,
     string? DrivingInstruction,
+    string? TrajectoryJson,
+    string? ActionsJson,
+    string? OriginalReasoningJson,
     int RequiredAnnotationCount,
     int CompletedAnnotationCount,
     int RemainingAnnotationCount,

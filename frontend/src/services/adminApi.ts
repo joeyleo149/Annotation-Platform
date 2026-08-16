@@ -51,6 +51,9 @@ export interface VideoCatalogItem {
   manifestMatched: boolean;
   scenarioType: string | null;
   drivingInstruction: string | null;
+  trajectoryJson: string | null;
+  actionsJson: string | null;
+  originalReasoningJson: string | null;
   requiredAnnotationCount: number;
   completedAnnotationCount: number;
   remainingAnnotationCount: number;
