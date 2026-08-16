@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
+import { useNavigate } from 'react-router';
 
 import {
   adminApi,
@@ -16,6 +17,8 @@ import {
 } from '../services/adminApi';
 
 import './AdminDashboard.css';
+import { getCurrentUser, logout } from '../services/authService';
+import AddAdminPage from './AddAdminPage';
 
 type DashboardView =
   | 'overview'
@@ -24,7 +27,8 @@ type DashboardView =
   | 'archivedVideos'
   | 'requests'
   | 'sessions'
-  | 'uploads';
+  | 'uploads'
+  | 'addAdmin';
 
 const navigation: {
   id: DashboardView;
@@ -42,6 +46,7 @@ const navigation: {
   { id: 'requests', label: 'Requests', icon: '⇄' },
   { id: 'sessions', label: 'Sessions', icon: '◷' },
   { id: 'uploads', label: 'Uploads', icon: '↑' },
+  { id: 'addAdmin', label: 'Add Admin', icon: '+' },
 ];
 
 function formatDate(value: string | null): string {
@@ -67,6 +72,8 @@ function getErrorMessage(error: unknown): string {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const currentUser = getCurrentUser();
   const [view, setView] =
     useState<DashboardView>('overview');
 
@@ -1275,6 +1282,8 @@ export default function AdminDashboard() {
         return renderSessions();
       case 'uploads':
         return renderUploads();
+      case 'addAdmin':
+        return <AddAdminPage />;
       default:
         return renderOverview();
     }
@@ -1311,11 +1320,14 @@ export default function AdminDashboard() {
         </nav>
 
         <div className="sidebar-footer">
-          <span className="avatar admin">RA</span>
-          <div>
-            <strong>Rozaline Admin</strong>
+          <span className="avatar admin">{currentUser?.email.slice(0, 2).toUpperCase() ?? 'AD'}</span>
+          <div className="admin-identity">
+            <strong>{currentUser?.email ?? 'Administrator'}</strong>
             <small>Administrator</small>
           </div>
+          <button className="admin-logout" type="button" onClick={() => { logout(); navigate('/login', { replace: true }); }} aria-label="Log out">
+            Log out
+          </button>
         </div>
       </aside>
 
@@ -1331,7 +1343,7 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          <div className="header-actions">
+          {view !== 'addAdmin' && <div className="header-actions">
             <select
               value={selectedDatasetId ?? ''}
               onChange={event =>
@@ -1360,11 +1372,11 @@ export default function AdminDashboard() {
             >
               ↻
             </button>
-          </div>
+          </div>}
         </header>
 
         <div className="admin-content">
-          {selectedDataset && (
+          {view !== 'addAdmin' && selectedDataset && (
             <div className="dataset-context">
               <span>
                 Dataset

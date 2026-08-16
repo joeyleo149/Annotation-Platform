@@ -3,7 +3,6 @@ import AdminDashboard from './pages/AdminDashboard';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VideoAnnotatorPage from './pages/VideoAnnotatorPage';
-import AddAdminPage from './pages/AddAdminPage';
 import { AnnotatorDashboard } from './pages/AnnotatorDashboard';
 import { AnnotatorSurveyPage } from './pages/AnnotatorSurveyPage';
 import VerticalNav from './components/VerticalNav';
@@ -21,6 +20,22 @@ function ProtectedRoute({ role }: { role: Role }) {
       </main>
     </div>
   );
+}
+
+function BareProtectedRoute({ role }: { role: Role }) {
+  const user = getCurrentUser();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== role) return <Navigate to={homeFor(user.role)} replace />;
+  return <Outlet />;
+}
+
+function SurveyGate() {
+  const location = useLocation();
+  const [completed, setCompleted] = useState<boolean | null>(null);
+  useEffect(() => { getSurveyStatus().then(result => setCompleted(result.hasCompletedSurvey)).catch(() => setCompleted(false)); }, [location.key]);
+  if (completed === null) return <p className="p-8">Checking survey status...</p>;
+  return completed ? <Outlet /> : <Navigate to="/survey" replace state={{ from: location.pathname }} />;
+}
 }
 
 function Placeholder({ title, description }: { title: string; description: string }) {
@@ -45,23 +60,26 @@ export default function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        
-        {/* Admin Routes */}
-        <Route element={<ProtectedRoute role="Admin" />}>
+
+        <Route element={<BareProtectedRoute role="Admin" />}>
           <Route path="/admin/upload" element={<AdminDashboard />} />
+        </Route>
+
+        <Route element={<ProtectedRoute role="Admin" />}>
           <Route path="/admin/videos" element={<Placeholder title="Uploaded Videos" description="Review videos available to annotators." />} />
           <Route path="/admin/profile" element={<Placeholder title="Profile" description="Manage your administrator account." />} />
           <Route path="/admin/add-admin" element={<AddAdminPage />} />
         </Route>
 
-        {/* Annotator Routes (Survey is now optional) */}
         <Route element={<ProtectedRoute role="Annotator" />}>
-          <Route path="/workspace" element={<AnnotatorDashboard />} />
-          <Route path="/annotator/videos" element={<AnnotatorDashboard />} />
-          <Route path="/annotator/annotations" element={<AnnotatorDashboard />} />
           <Route path="/survey" element={<AnnotatorSurveyPage />} />
-          <Route path="/annotator/profile" element={<Placeholder title="Profile" description="Manage your annotator account." />} />
-          <Route path="/annotate/:sessionId" element={<VideoAnnotatorPage />} />
+          <Route element={<SurveyGate />}>
+            <Route path="/workspace" element={<AnnotatorDashboard />} />
+            <Route path="/annotator/videos" element={<AnnotatorDashboard />} />
+            <Route path="/annotator/annotations" element={<AnnotatorDashboard />} />
+            <Route path="/annotator/profile" element={<Placeholder title="Profile" description="Manage your annotator account." />} />
+            <Route path="/annotate/:sessionId" element={<VideoAnnotatorPage />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<RootRedirect />} />

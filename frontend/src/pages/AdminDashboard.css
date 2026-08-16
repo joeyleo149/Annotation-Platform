@@ -242,6 +242,16 @@ button {
   padding: 26px 32px 40px;
 }
 
+.admin-content .add-admin-view {
+  min-height: auto;
+  padding: clamp(28px, 4vw, 52px);
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-content .add-admin-heading h1 {
+  font-size: 30px;
+}
+
 .dataset-context {
   margin-bottom: 18px;
   display: flex;
@@ -1119,4 +1129,37 @@ td strong {
   .modal-actions button {
     width: 100%;
   }
+}
+
+.admin-identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.admin-identity strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-identity small {
+  display: block;
+  color: var(--admin-muted);
+  font-size: 10px;
+}
+
+.admin-logout {
+  border: 0;
+  background: transparent;
+  color: var(--admin-red);
+  padding: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.admin-logout:hover {
+  color: #b83f3f;
+  text-decoration: underline;
 }
