@@ -1,6 +1,9 @@
-python -m venv .venv
-.venv\Scripts\activate
+3rd terminal for the transcription script
 
-cd backend
+cd backend\Scripts
+python -m venv venv
+venv\Scripts\Activate.ps1
 
-pip install requirements.txt
+cd ..
+pip install -r requirements.txt
+python speech_to_text.py --video path\to\clip.mp4
