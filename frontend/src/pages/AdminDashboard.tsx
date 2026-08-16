@@ -18,6 +18,7 @@ import {
 
 import './AdminDashboard.css';
 import { getCurrentUser, logout } from '../services/authService';
+import AddAdminPage from './AddAdminPage';
 
 type DashboardView =
   | 'overview'
@@ -26,7 +27,8 @@ type DashboardView =
   | 'archivedVideos'
   | 'requests'
   | 'sessions'
-  | 'uploads';
+  | 'uploads'
+  | 'addAdmin';
 
 const navigation: {
   id: DashboardView;
@@ -44,6 +46,7 @@ const navigation: {
   { id: 'requests', label: 'Requests', icon: '⇄' },
   { id: 'sessions', label: 'Sessions', icon: '◷' },
   { id: 'uploads', label: 'Uploads', icon: '↑' },
+  { id: 'addAdmin', label: 'Add Admin', icon: '+' },
 ];
 
 function formatDate(value: string | null): string {
@@ -1279,6 +1282,8 @@ export default function AdminDashboard() {
         return renderSessions();
       case 'uploads':
         return renderUploads();
+      case 'addAdmin':
+        return <AddAdminPage />;
       default:
         return renderOverview();
     }
@@ -1338,7 +1343,7 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          <div className="header-actions">
+          {view !== 'addAdmin' && <div className="header-actions">
             <select
               value={selectedDatasetId ?? ''}
               onChange={event =>
@@ -1367,11 +1372,11 @@ export default function AdminDashboard() {
             >
               ↻
             </button>
-          </div>
+          </div>}
         </header>
 
         <div className="admin-content">
-          {selectedDataset && (
+          {view !== 'addAdmin' && selectedDataset && (
             <div className="dataset-context">
               <span>
                 Dataset

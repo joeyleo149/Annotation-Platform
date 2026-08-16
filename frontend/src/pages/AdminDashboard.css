@@ -242,6 +242,16 @@ button {
   padding: 26px 32px 40px;
 }
 
+.admin-content .add-admin-view {
+  min-height: auto;
+  padding: clamp(28px, 4vw, 52px);
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-content .add-admin-heading h1 {
+  font-size: 30px;
+}
+
 .dataset-context {
   margin-bottom: 18px;
   display: flex;

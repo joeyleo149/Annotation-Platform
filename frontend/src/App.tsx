@@ -4,7 +4,6 @@ import AdminDashboard from './pages/AdminDashboard';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VideoAnnotatorPage from './pages/VideoAnnotatorPage';
-import AddAdminPage from './pages/AddAdminPage';
 import { AnnotatorDashboard } from './pages/AnnotatorDashboard';
 import { AnnotatorSurveyPage } from './pages/AnnotatorSurveyPage';
 import VerticalNav from './components/VerticalNav';
@@ -50,7 +49,7 @@ export default function App() {
     <Route element={<ProtectedRoute role="Admin" />}>
       <Route path="/admin/videos" element={<Placeholder title="Uploaded Videos" description="Review videos available to annotators." />} />
       <Route path="/admin/profile" element={<Placeholder title="Profile" description="Manage your administrator account." />} />
-      <Route path="/admin/add-admin" element={<AddAdminPage />} />
+      <Route path="/admin/add-admin" element={<Navigate to="/admin/upload" replace />} />
     </Route>
     <Route element={<ProtectedRoute role="Annotator" />}>
       <Route path="/survey" element={<AnnotatorSurveyPage />} />
