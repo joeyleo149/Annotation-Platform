@@ -36,7 +36,9 @@ public static class TranscriptionEndpoints
             using var content = new MultipartFormDataContent();
             await using var audioStream = audioFile.OpenReadStream();
             var audioContent = new StreamContent(audioStream);
-            audioContent.Headers.ContentType = new MediaTypeHeaderValue(audioFile.ContentType);
+            var baseContentType = audioFile.ContentType.Split(';')[0].Trim();
+            audioContent.Headers.ContentType = new MediaTypeHeaderValue(baseContentType);
+            
             content.Add(audioContent, "file", audioFile.FileName);
             content.Add(new StringContent("whisper-large-v3"), "model");
             content.Add(new StringContent("en"), "language");
