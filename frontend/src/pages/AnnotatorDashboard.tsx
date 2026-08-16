@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import api from '../services/api';
 import { getCurrentUser } from '../services/authService';
 
@@ -31,13 +31,16 @@ type VideoSummary = {
 };
 
 const groups = [
-  ['Pending', 'Assigned'],
+  ['Assigned', 'Assigned'],
   ['In Progress', 'InProgress'],
   ['Completed', 'Completed'],
 ] as const;
 
 export function AnnotatorDashboard() {
   const user = getCurrentUser();
+  const location = useLocation();
+  const isAnnotationsView = location.pathname === '/annotator/annotations';
+  const isVideosView = location.pathname === '/annotator/videos' || location.pathname === '/workspace';
   const [sessions, setSessions] = useState<Session[]>([]);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [requestingIds, setRequestingIds] = useState<number[]>([]);
@@ -174,74 +177,84 @@ export function AnnotatorDashboard() {
 
       {error && <p className="text-red-600">{error}</p>}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Available datasets</h2>
-            <p className="text-sm text-slate-500">Request admin approval for a dataset you want to annotate.</p>
+      {!isVideosView && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Available datasets</h2>
+              <p className="text-sm text-slate-500">Request admin approval for a dataset you want to annotate.</p>
+            </div>
           </div>
-        </div>
 
-        {datasets.length === 0 ? (
-          <p className="text-sm text-slate-400">No active datasets are available right now.</p>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {datasets.map(dataset => (
-              <article key={dataset.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">{dataset.datasetType ?? 'Dataset'}</p>
-                  <h3 className="mt-1 text-lg font-semibold text-slate-900">{dataset.name}</h3>
-                </div>
+          {datasets.length === 0 ? (
+            <p className="text-sm text-slate-400">No active datasets are available right now.</p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {datasets.map(dataset => (
+                <article key={dataset.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{dataset.datasetType ?? 'Dataset'}</p>
+                    <h3 className="mt-1 text-lg font-semibold text-slate-900">{dataset.name}</h3>
+                  </div>
 
-                <button
-                  type="button"
-                  className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  disabled={requestingIds.includes(dataset.id) || blockedDatasetIds.has(dataset.id)}
-                  onClick={() => handleRequestDataset(dataset.id, dataset.name)}
-                >
-                  {requestingIds.includes(dataset.id)
-                    ? 'Sending request…'
-                    : blockedDatasetIds.has(dataset.id)
-                      ? 'Request locked'
-                      : 'Request to admin'}
-                </button>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        {groups.map(([label, status]) => (
-          <section key={status} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-4 text-lg font-bold text-slate-900">
-              {label} <span className="text-slate-400">({byStatus[status].length})</span>
-            </h2>
-
-            <div className="space-y-3">
-              {byStatus[status].map(session => (
-                <article key={session.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                  <strong className="block text-slate-900">Video #{session.videoId}</strong>
-                  <p className="mt-1 text-sm text-slate-500">Session #{session.id}</p>
-
-                  {status !== 'Completed' && (
-                    <Link
-                      className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:text-blue-700"
-                      to={`/annotate/${session.id}`}
-                    >
-                      {status === 'Assigned' ? 'Start annotation' : 'Continue annotation'} →
-                    </Link>
-                  )}
+                  <button
+                    type="button"
+                    className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    disabled={requestingIds.includes(dataset.id) || blockedDatasetIds.has(dataset.id)}
+                    onClick={() => handleRequestDataset(dataset.id, dataset.name)}
+                  >
+                    {requestingIds.includes(dataset.id)
+                      ? 'Sending request…'
+                      : blockedDatasetIds.has(dataset.id)
+                        ? 'Request locked'
+                        : 'Request to admin'}
+                  </button>
                 </article>
               ))}
-
-              {byStatus[status].length === 0 && (
-                <p className="text-sm text-slate-400">No sessions.</p>
-              )}
             </div>
-          </section>
-        ))}
-      </div>
+          )}
+        </section>
+      )}
+
+      {isVideosView && (
+        <div className="grid gap-5 lg:grid-cols-3">
+          {groups.map(([label, status]) => (
+            <section key={status} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-lg font-bold text-slate-900">
+                {label} <span className="text-slate-400">({byStatus[status].length})</span>
+              </h2>
+
+              <div className="space-y-3">
+                {byStatus[status].map(session => (
+                  <article key={session.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <strong className="block text-slate-900">Video #{session.videoId}</strong>
+                    <p className="mt-1 text-sm text-slate-500">Session #{session.id}</p>
+
+                    {status !== 'Completed' && (
+                      <Link
+                        className="mt-3 inline-block text-sm font-semibold text-blue-600 hover:text-blue-700"
+                        to={`/annotate/${session.id}`}
+                      >
+                        {status === 'Assigned' ? 'Start annotation' : 'Continue annotation'} →
+                      </Link>
+                    )}
+                  </article>
+                ))}
+
+                {byStatus[status].length === 0 && (
+                  <p className="text-sm text-slate-400">No sessions.</p>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {isAnnotationsView && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm text-sm text-slate-500">
+          No annotation sessions to display here. Use the videos view to manage your assigned work.
+        </div>
+      )}
     </div>
   );
 }
