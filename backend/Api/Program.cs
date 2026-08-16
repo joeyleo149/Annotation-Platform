@@ -212,6 +212,11 @@ app.MapSurveyEndpoints()
         policy =>
             policy.RequireRole("Annotator"));
 
+app.MapTranscriptionEndpoints()
+    .RequireAuthorization(
+        policy =>
+            policy.RequireRole("Annotator"));
+
 app.MapUploadEndpoints();
 app.MapAnnotationExportEndpoints();
 app.MapDatasetEndpoints();

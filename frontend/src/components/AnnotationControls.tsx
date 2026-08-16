@@ -187,7 +187,13 @@ export default function AnnotationControls({
       formData.append("audio", audioBlob, "recording.webm");
 
       try {
-        const res = await fetch("/api/transcribe", { method: "POST", body: formData });
+        const token = localStorage.getItem("annotate_pro_token");
+        const res = await fetch("/api/transcribe", {
+          method: "POST",
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
         if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
         const { text } = await res.json();
         setDraftText((prev) => (prev ? prev + " " : "") + text);

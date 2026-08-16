@@ -49,6 +49,24 @@ public sealed class AnnotationAssignmentService(
                 $"Dataset '{dataset.Name}' is archived.");
         }
 
+        var hasActiveAssignment = await context.AnnotationSessions
+            .AsNoTracking()
+            .AnyAsync(
+                session =>
+                    session.AnnotatorId == annotatorId &&
+                    session.Video.DatasetId == datasetId &&
+                    (session.Status ==
+                        AnnotationSessionStatus.Assigned ||
+                     session.Status ==
+                        AnnotationSessionStatus.InProgress),
+                cancellationToken);
+
+        if (hasActiveAssignment)
+        {
+            throw new TaskRequestConflictException(
+                "This annotator already has an active assignment for this dataset.");
+        }
+
         var existingRequest =
             await context.AnnotationTaskRequests
                 .AsNoTracking()

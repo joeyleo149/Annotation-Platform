@@ -3,6 +3,7 @@ import { useParams } from "react-router";
 import { ChevronRight, Folder } from "lucide-react";
 import VideoPlayer, { type VideoPlayerHandle } from "../components/VideoPlayer";
 import AnnotationControls, { type Segment } from "../components/AnnotationControls";
+import api from "../services/api";
 import {
   getSegmentsBySession,
   createSegment,
@@ -10,10 +11,9 @@ import {
   deleteSegment,
   secondsToTimeSpan,
   timeSpanToSeconds,
-  type SegmentResponseDto,
 } from "../services/SegmentResponseService";
 
-const MOCK_MODE = true;
+const MOCK_MODE = false;
 
 const MOCK_SESSION = {
   sessionId: 1,
@@ -22,7 +22,29 @@ const MOCK_SESSION = {
   clipName: "download.mp4",
 };
 
-const SINGLE_ANNOTATION_DURATION = 4;
+const DEFAULT_ANNOTATION_DURATION = 4;
+
+type SessionDetails = {
+  id: number;
+  annotatorId: number;
+  videoId: number;
+  status: string;
+  assignedAt: string;
+  expiresAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+};
+
+type VideoDetails = {
+  id: number;
+  datasetId: number | null;
+  datasetName: string | null;
+  fileName: string;
+  durationSeconds: number | null;
+  processingStatus: string;
+  streamUrl: string;
+};
 
 // TODO: real value once sessions can hold multiple videos — hardcoded true for now
 // since "Next Video" is a non-functional placeholder until that flow exists.
@@ -35,30 +57,84 @@ export default function VideoAnnotatorPage() {
   const playerRef = useRef<VideoPlayerHandle>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [singleAnnotationDuration, setSingleAnnotationDuration] = useState<number>(DEFAULT_ANNOTATION_DURATION);
 
-  const videoSrc = MOCK_MODE ? MOCK_SESSION.videoSrc : "";
-  const projectName = MOCK_MODE ? MOCK_SESSION.projectName : "";
-  const clipName = MOCK_MODE ? MOCK_SESSION.clipName : "";
+  const [videoSrc, setVideoSrc] = useState<string | null>(MOCK_MODE ? MOCK_SESSION.videoSrc : null);
+  const [projectName, setProjectName] = useState(MOCK_MODE ? MOCK_SESSION.projectName : "");
+  const [clipName, setClipName] = useState(MOCK_MODE ? MOCK_SESSION.clipName : "");
 
   const [segments, setSegments] = useState<Segment[]>([]);
 
   useEffect(() => {
     if (MOCK_MODE) return;
-    getSegmentsBySession(sessionId)
-      .then((rows: SegmentResponseDto[]) => {
-        if (rows.length > 0) {
+
+    let ignore = false;
+
+    const loadAssignedVideo = async () => {
+      try {
+        const sessionResponse = await api.get(`/annotation-sessions/${sessionId}`);
+        const session = sessionResponse.data as SessionDetails | null;
+
+        if (!session || !session.videoId) {
+          throw new Error("This annotation session is missing a valid video.");
+        }
+
+        const videoResponse = await api.get(`/videos/${session.videoId}`);
+        const video = videoResponse.data as VideoDetails | null;
+
+        if (!video) {
+          throw new Error("The assigned video could not be found.");
+        }
+
+        const nextDuration = Number(video.durationSeconds ?? DEFAULT_ANNOTATION_DURATION);
+
+        const token = localStorage.getItem("annotate_pro_token");
+        const streamResponse = await fetch(`/api/videos/${session.videoId}/stream`, {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        if (!streamResponse.ok) {
+          throw new Error("The assigned video stream could not be loaded.");
+        }
+
+        const blob = await streamResponse.blob();
+        const objectUrl = URL.createObjectURL(blob);
+
+        if (!ignore) {
+          setVideoSrc(objectUrl);
+          setProjectName(video.datasetName || "Dataset");
+          setClipName(video.fileName || `Video #${video.id}`);
+          setSingleAnnotationDuration(Number.isFinite(nextDuration) && nextDuration > 0 ? nextDuration : DEFAULT_ANNOTATION_DURATION);
+        }
+
+        const rows = await getSegmentsBySession(sessionId);
+
+        if (!ignore) {
           setSegments(
-            rows.map((r) => ({
-              id: String(r.id),
-              startTime: timeSpanToSeconds(r.startTime),
-              endTime: timeSpanToSeconds(r.endTime),
-              text: r.transcript,
-              labels: ["Full Clip"],
-            }))
+            rows.length > 0
+              ? rows.map((r) => ({
+                  id: String(r.id),
+                  startTime: timeSpanToSeconds(r.startTime),
+                  endTime: timeSpanToSeconds(r.endTime),
+                  text: r.transcript,
+                  labels: ["Full Clip"],
+                }))
+              : []
           );
         }
-      })
-      .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : "Unable to load annotations."));
+      } catch (error) {
+        if (!ignore) {
+          setLoadError(error instanceof Error ? error.message : "Unable to load the assigned video.");
+        }
+      }
+    };
+
+    void loadAssignedVideo();
+
+    return () => {
+      ignore = true;
+    };
   }, [sessionId]);
 
   // Appends composer text to the existing annotation, or creates the first one.
@@ -78,7 +154,7 @@ export default function VideoAnnotatorPage() {
         {
           id: existingTarget?.id || "seg-1",
           startTime: existingTarget?.startTime ?? 0,
-          endTime: existingTarget?.endTime ?? SINGLE_ANNOTATION_DURATION,
+          endTime: existingTarget?.endTime ?? singleAnnotationDuration,
           text: combinedText,
           labels: ["Full Clip"],
         },
@@ -101,14 +177,14 @@ export default function VideoAnnotatorPage() {
           annotationSessionId: sessionId,
           segmentNumber: 1,
           startTime: secondsToTimeSpan(0),
-          endTime: secondsToTimeSpan(SINGLE_ANNOTATION_DURATION),
+          endTime: secondsToTimeSpan(singleAnnotationDuration),
           transcript: combinedText,
         });
         setSegments([
           {
             id: String(created.id),
             startTime: 0,
-            endTime: SINGLE_ANNOTATION_DURATION,
+            endTime: singleAnnotationDuration,
             text: combinedText,
             labels: ["Full Clip"],
           },
@@ -200,7 +276,13 @@ export default function VideoAnnotatorPage() {
 
       <div className="flex flex-1 min-h-0">
         <div className="flex-1 min-h-0 min-w-0 overflow-hidden bg-black flex flex-col">
-          <VideoPlayer ref={playerRef} src={videoSrc} onTimeUpdate={setCurrentTime} />
+          {videoSrc ? (
+            <VideoPlayer ref={playerRef} src={videoSrc} onTimeUpdate={setCurrentTime} />
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-slate-200">
+              Loading assigned video...
+            </div>
+          )}
         </div>
 
         <aside className="w-[400px] border-l border-slate-200 bg-white flex flex-col min-h-0">

@@ -332,20 +332,72 @@ function uploadForm<T>(
         return;
       }
 
-      const message =
-        typeof data === 'object' &&
-        data !== null &&
-        'message' in data
-          ? String(data.message)
-          : typeof data === 'object' &&
-              data !== null &&
-              'error' in data
-            ? String(data.error)
-            : typeof data === 'object' &&
-                data !== null &&
-                'title' in data
-              ? String(data.title)
-              : `Upload failed with status ${xhr.status}.`;
+      const message = (() => {
+        if (typeof data === 'object' && data !== null) {
+          if ('message' in data && typeof data.message === 'string') {
+            return data.message;
+          }
+
+          if ('error' in data && typeof data.error === 'string') {
+            return data.error;
+          }
+
+          if ('title' in data && typeof data.title === 'string') {
+            return data.title;
+          }
+
+          if ('failedUploads' in data && Array.isArray(data.failedUploads)) {
+            const failed = data.failedUploads
+              .map(item => {
+                if (
+                  typeof item === 'object' &&
+                  item !== null &&
+                  'error' in item &&
+                  typeof item.error === 'string'
+                ) {
+                  const name =
+                    'fileName' in item &&
+                    typeof item.fileName === 'string'
+                      ? item.fileName
+                      : 'File';
+
+                  return `${name}: ${item.error}`;
+                }
+
+                return String(item);
+              })
+              .filter(Boolean)
+              .join('; ');
+
+            if (failed) {
+              return failed;
+            }
+          }
+
+          if ('errors' in data && typeof data.errors === 'object' && data.errors !== null) {
+            const details = Object.values(data.errors)
+              .flatMap(value => {
+                if (Array.isArray(value)) {
+                  return value.map(item => String(item));
+                }
+
+                return [String(value)];
+              })
+              .filter(Boolean)
+              .join('; ');
+
+            if (details) {
+              return details;
+            }
+          }
+        }
+
+        if (typeof data === 'string' && data.trim()) {
+          return data.trim();
+        }
+
+        return `Upload failed with status ${xhr.status}.`;
+      })();
 
       reject(new Error(message));
     };
