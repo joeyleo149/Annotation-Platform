@@ -397,6 +397,79 @@ public sealed class AnnotationAssignmentService(
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<SessionCompletionResult>
+        CompleteSessionAsync(
+            int sessionId,
+            CancellationToken cancellationToken = default)
+    {
+        var session = await context.AnnotationSessions
+            .Include(item => item.SegmentResponses)
+                .ThenInclude(item => item.QuestionAnswers)
+            .SingleOrDefaultAsync(
+                item => item.Id == sessionId,
+                cancellationToken);
+
+        if (session is null)
+        {
+            return new SessionCompletionResult(
+                false,
+                "Annotation session was not found.");
+        }
+
+        if (session.Status == AnnotationSessionStatus.Completed)
+        {
+            return new SessionCompletionResult(
+                true,
+                "This annotation has already been completed.");
+        }
+
+        var hasTranscript = session.SegmentResponses
+            .Any(segment =>
+                !string.IsNullOrWhiteSpace(segment.Transcript));
+
+        if (!hasTranscript)
+        {
+            return new SessionCompletionResult(
+                false,
+                "Add a transcription before finishing this video.");
+        }
+
+        var totalQuestions = await context.Questions
+            .CountAsync(cancellationToken);
+
+        if (totalQuestions > 0)
+        {
+            var missingAnswers = session.SegmentResponses
+                .Any(segment =>
+                {
+                    var answeredQuestionNumbers = segment.QuestionAnswers
+                        .Select(answer => answer.QuestionNumber)
+                        .ToHashSet();
+
+                    return Enumerable.Range(1, totalQuestions)
+                        .Any(questionNumber =>
+                            !answeredQuestionNumbers.Contains(questionNumber));
+                });
+
+            if (missingAnswers)
+            {
+                return new SessionCompletionResult(
+                    false,
+                    "Answer all required questions before finishing this video.");
+            }
+        }
+
+        session.Status = AnnotationSessionStatus.Completed;
+        session.CompletedAt = DateTimeOffset.UtcNow;
+        session.StartedAt ??= session.AssignedAt;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        return new SessionCompletionResult(
+            true,
+            "Annotation completed successfully.");
+    }
+
     public async Task<ExpirationProcessingResult>
         ProcessExpiredAssignmentsAsync(
             int reassignmentDurationDays,
@@ -502,6 +575,10 @@ public sealed record SessionResult(
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
     DateTimeOffset? CancelledAt);
+
+public sealed record SessionCompletionResult(
+    bool Success,
+    string Message);
 
 public sealed record ExpirationProcessingResult(
     int ExpiredSessionCount,

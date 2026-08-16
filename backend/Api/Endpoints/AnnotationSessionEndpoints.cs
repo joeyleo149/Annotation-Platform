@@ -16,6 +16,7 @@ public static class AnnotationSessionEndpoints
         group.MapGet("/", GetSessionsAsync);
         group.MapGet("/mine", GetMySessionsAsync).RequireAuthorization(policy => policy.RequireRole("Annotator"));
         group.MapGet("/{id:int}", GetSessionAsync);
+        group.MapPost("/{id:int}/complete", CompleteSessionAsync).RequireAuthorization(policy => policy.RequireRole("Annotator"));
         group.MapGet("/requests", GetRequestsAsync);
         group.MapPost("/requests", CreateRequestAsync);
         group.MapDelete(
@@ -70,6 +71,18 @@ public static class AnnotationSessionEndpoints
                     $"Annotation session {id} does not exist."
             })
             : Results.Ok(session);
+    }
+
+    private static async Task<IResult> CompleteSessionAsync(
+        int id,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        var result = await assignmentService.CompleteSessionAsync(id, cancellationToken);
+
+        return result.Success
+            ? Results.Ok(new { message = result.Message })
+            : Results.BadRequest(new { message = result.Message });
     }
 
     private static async Task<IResult> GetRequestsAsync(

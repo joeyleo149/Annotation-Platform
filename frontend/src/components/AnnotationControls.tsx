@@ -19,6 +19,7 @@ interface AnnotationControlsProps {
   onCompleteAnnotation: (id: string, updated: Partial<Segment>) => void; // single commit to backend
   onDeleteSegment: (id: string) => void;
   onNextVideo?: () => void; // not wired yet — flow for multi-video sessions is incomplete
+  onFinalizeSession?: () => Promise<void> | void;
 }
 
 function formatTime(s: number): string {
@@ -93,6 +94,7 @@ export default function AnnotationControls({
   onCompleteAnnotation,
   onDeleteSegment,
   onNextVideo,
+  onFinalizeSession,
 }: AnnotationControlsProps) {
   const [tab, setTab] = useState<"transcription" | "questions">("transcription");
   const [draftText, setDraftText] = useState("");
@@ -236,7 +238,7 @@ export default function AnnotationControls({
 
   const completionText = segments[0] ? (localEdits[segments[0].id]?.text ?? segments[0].text ?? "") : "";
 
-  const toggleCompleteState = () => {
+  const toggleCompleteState = async () => {
     if (isMarkedCompleted) {
       setIsMarkedCompleted(false);
       setJustCompleted(null);
@@ -248,6 +250,10 @@ export default function AnnotationControls({
 
     handleComplete(firstSegment.id);
     setIsMarkedCompleted(true);
+
+    if (onFinalizeSession) {
+      await onFinalizeSession();
+    }
   };
 
   const isDirtyFor = (seg: Segment) => {

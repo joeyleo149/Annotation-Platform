@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
-import { useParams } from "react-router";
-import { ChevronRight, Folder } from "lucide-react";
+import { useNavigate, useParams } from "react-router";
+import { ChevronRight} from "lucide-react";
 import VideoPlayer, { type VideoPlayerHandle } from "../components/VideoPlayer";
 import AnnotationControls, { type Segment } from "../components/AnnotationControls";
 import api from "../services/api";
@@ -52,6 +52,7 @@ const IS_LAST_VIDEO = true;
 
 export default function VideoAnnotatorPage() {
   const params = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const sessionId = MOCK_MODE ? MOCK_SESSION.sessionId : Number(params.sessionId);
 
   const playerRef = useRef<VideoPlayerHandle>(null);
@@ -241,6 +242,38 @@ export default function VideoAnnotatorPage() {
     console.log("Next video — not implemented yet.");
   };
 
+  const handleCompleteSession = async () => {
+    if (MOCK_MODE) {
+      navigate('/annotator/annotations');
+      return;
+    }
+
+    const transcript = segments[0]?.text?.trim();
+    if (!transcript) {
+      setLoadError('Add a transcription before finishing this video.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('annotate_pro_token');
+      const response = await fetch(`/api/annotation-sessions/${sessionId}/complete`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || 'Unable to complete this annotation.');
+      }
+
+      navigate('/annotator/annotations');
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to complete this annotation.');
+    }
+  };
+
   // const handleUpdateSegment = async (id: string, updatedFields: Partial<Segment>) => {
   //   const target = segments.find(segment => segment.id === id);
   //   if (!target) return;
@@ -286,15 +319,7 @@ export default function VideoAnnotatorPage() {
         </div>
 
         <aside className="w-[400px] border-l border-slate-200 bg-white flex flex-col min-h-0">
-          <div className="shrink-0 flex items-center gap-2 px-5 py-4 border-b border-slate-200">
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
-              <Folder size={16} />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-900">Project Workspace</div>
-              <div className="text-xs text-slate-400">Session {sessionId}</div>
-            </div>
-          </div>
+          
 
           <div className="flex-1 px-5 py-4 min-h-0 overflow-y-auto">
             <AnnotationControls
@@ -307,6 +332,7 @@ export default function VideoAnnotatorPage() {
               onCompleteAnnotation={handleCompleteAnnotation}
               onDeleteSegment={handleDeleteSegment}
               onNextVideo={handleNextVideo}
+              onFinalizeSession={handleCompleteSession}
             />
           </div>
         </aside>
