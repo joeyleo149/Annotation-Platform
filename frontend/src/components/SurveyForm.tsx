@@ -14,7 +14,7 @@ const DRIVING_FREQUENCIES = [
   { id: "Regular", title: "Regular Driver", desc: "2–4 days per week" },
   { id: "Occasional", title: "Occasional Driver", desc: "1–3 days per month" },
   { id: "Infrequent", title: "Infrequent Driver", desc: "A few times per year" },
-  { id: "Inactive", title: "Inactive / Non-Driver", desc: "Licensed, but never drive" }
+  { id: "Inactive", title: "Inactive / Non-Driver", desc: "Licensed, but never driven" }
 ];
 
 export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess, initialData }) => {
@@ -403,7 +403,7 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess, initialData }
 
           <div>
             <label className="block text-sm font-bold text-slate-900 mb-2">
-              6. Have you been involved in any road accidents in the last 5 years?
+              6. Have you been involved in any road accidents?
             </label>
             <div className="grid grid-cols-2 gap-3">
               {[true, false].map((val) => (
