@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import VideoPlayer, { type VideoPlayerHandle } from "../components/VideoPlayer";
 import AnnotationControls, { type Segment } from "../components/AnnotationControls";
 import api from "../services/api";
+import { WaypointGraph } from "../components/WaypointGraph";
 import {
   getSegmentsBySession,
   createSegment,
@@ -86,50 +87,222 @@ function getWaypointSummary(raw: string | null | undefined) {
   };
 }
 
-function WaypointGraph({
-  waypoints,
-  title,
-}: {
-  waypoints: Waypoint[];
-  title: string;
-}) {
-  if (!waypoints.length) return null;
+// function WaypointGraph({
+//   waypoints,
+//   title,
+// }: {
+//   waypoints: Waypoint[];
+//   title: string;
+// }) {
+//   if (!waypoints.length) return null;
 
-  const xs = waypoints.map(([x]) => x);
-  const ys = waypoints.map(([, y]) => y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const rangeX = Math.max(maxX - minX, 1);
-  const rangeY = Math.max(maxY - minY, 1);
+//   const xs = waypoints.map(([x]) => x);
+//   const ys = waypoints.map(([, y]) => y);
+//   const minX = Math.min(...xs);
+//   const maxX = Math.max(...xs);
+//   const minY = Math.min(...ys);
+//   const maxY = Math.max(...ys);
+//   const rangeX = Math.max(maxX - minX, 1);
+//   const rangeY = Math.max(maxY - minY, 1);
 
-  const points = waypoints
-    .map(([x, y]) => {
-      const px = 18 + ((x - minX) / rangeX) * 268;
-      const py = 188 - ((y - minY) / rangeY) * 150;
-      return `${px},${py}`;
-    })
-    .join(" ");
+//   const points = waypoints
+//     .map(([x, y]) => {
+//       const px = 18 + ((x - minX) / rangeX) * 268;
+//       const py = 188 - ((y - minY) / rangeY) * 150;
+//       return `${px},${py}`;
+//     })
+//     .join(" ");
 
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
-        {title}
-      </div>
-      <svg viewBox="0 0 300 200" className="h-40 w-full rounded-lg bg-white" role="img" aria-label={title}>
-        <path d={`M ${points}`} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        {waypoints.map(([x, y], index) => {
-          const px = 18 + ((x - minX) / rangeX) * 268;
-          const py = 188 - ((y - minY) / rangeY) * 150;
-          return (
-            <circle key={`${title}-${index}`} cx={px} cy={py} r={2.5} fill={index === waypoints.length - 1 ? "#16a34a" : "#2563eb"} />
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
+//   return (
+//     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+//       <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+//         {title}
+//       </div>
+//       <svg viewBox="0 0 300 200" className="h-40 w-full rounded-lg bg-white" role="img" aria-label={title}>
+//         <path d={`M ${points}`} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+//         {waypoints.map(([x, y], index) => {
+//           const px = 18 + ((x - minX) / rangeX) * 268;
+//           const py = 188 - ((y - minY) / rangeY) * 150;
+//           return (
+//             <circle key={`${title}-${index}`} cx={px} cy={py} r={2.5} fill={index === waypoints.length - 1 ? "#16a34a" : "#2563eb"} />
+//           );
+//         })}
+//       </svg>
+//     </div>
+//   );
+// }
+
+// function WaypointGraph({
+//   waypoints,
+//   title,
+//   carWidth = 2.0, // Fixed lateral vehicle/lane width offset (meters)
+// }: {
+//   waypoints: Waypoint[];
+//   title: string;
+//   carWidth?: number;
+// }) {
+//   if (!waypoints.length) return null;
+
+//   // Include origin (0,0) so the Ego vehicle is always visible
+//   const xs = [0, ...waypoints.map(([x]) => x)];
+//   const ys = [0, ...waypoints.map(([, y]) => y)];
+
+//   const minX = Math.min(...xs);
+//   const maxX = Math.max(...xs, 25); // Minimum forward scale threshold
+//   const minY = Math.min(...ys, -3);
+//   const maxY = Math.max(...ys, 3);
+
+//   // Padding & bounds
+//   const xSpan = Math.max(maxX - minX, 1) * 1.15;
+//   const ySpan = Math.max(maxY - minY, 1) * 1.3;
+
+//   // ViewBox dimensions
+//   const svgWidth = 500;
+//   const svgHeight = 280;
+//   const padding = { left: 45, right: 25, top: 25, bottom: 35 };
+//   const graphW = svgWidth - padding.left - padding.right;
+//   const graphH = svgHeight - padding.top - padding.bottom;
+
+//   // Helper: Convert Cartesian meters (x: forward, y: lateral left+) to SVG canvas coordinates
+//   const toSvg = (x: number, y: number) => {
+//     const px = padding.left + ((x - minX) / xSpan) * graphW;
+//     const py = padding.top + graphH - ((y - minY) / ySpan) * graphH;
+//     return { x: px, y: py };
+//   };
+
+//   // Generate path points (include origin 0,0 at start)
+//   const fullWaypoints: Waypoint[] = [[0, 0], ...waypoints];
+//   const mainPoints = fullWaypoints.map(([x, y]) => toSvg(x, y));
+
+//   // Generate drivable path corridor boundaries using normal offset vectors
+//   const leftBoundary: { x: number; y: number }[] = [];
+//   const rightBoundary: { x: number; y: number }[] = [];
+
+//   for (let i = 0; i < fullWaypoints.length; i++) {
+//     const [cx, cy] = fullWaypoints[i];
+//     let dx = 1;
+//     let dy = 0;
+
+//     if (i < fullWaypoints.length - 1) {
+//       dx = fullWaypoints[i + 1][0] - cx;
+//       dy = fullWaypoints[i + 1][1] - cy;
+//     } else if (i > 0) {
+//       dx = cx - fullWaypoints[i - 1][0];
+//       dy = cy - fullWaypoints[i - 1][1];
+//     }
+
+//     const len = Math.hypot(dx, dy) || 1;
+//     const nx = -dy / len; // Normal vector perpendicular to trajectory
+//     const ny = dx / len;
+
+//     const halfWidth = carWidth / 2;
+//     leftBoundary.push(toSvg(cx + nx * halfWidth, cy + ny * halfWidth));
+//     rightBoundary.push(toSvg(cx - nx * halfWidth, cy - ny * halfWidth));
+//   }
+
+//   // Polygon path for shaded corridor ribbon
+//   const corridorPathD =
+//     `M ${leftBoundary.map((p) => `${p.x},${p.y}`).join(" L ")} ` +
+//     `L ${rightBoundary.slice().reverse().map((p) => `${p.x},${p.y}`).join(" L ")} Z`;
+
+//   const pathD = `M ${mainPoints.map((p) => `${p.x},${p.y}`).join(" L ")}`;
+
+//   // Grid line intervals
+//   const xTicks = Array.from({ length: 6 }, (_, i) => minX + (xSpan / 5) * i);
+//   const yTicks = Array.from({ length: 5 }, (_, i) => minY + (ySpan / 4) * i);
+
+//   // Ego vehicle representation centered at (0,0)
+//   const egoOrigin = toSvg(0, 0);
+
+//   return (
+//     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+//       <div className="mb-2 flex items-center justify-between">
+//         <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+//           {title}
+//         </span>
+//         <span className="text-xs text-slate-400 font-mono">
+//           {waypoints.length} waypoints
+//         </span>
+//       </div>
+
+//       <div className="relative w-full overflow-hidden rounded-xl border border-slate-100 bg-slate-50/50">
+//         <svg
+//           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+//           className="w-full h-auto select-none"
+//           role="img"
+//           aria-label={title}
+//         >
+//           {/* Background Grid Lines */}
+//           {xTicks.map((xVal, i) => {
+//             const p1 = toSvg(xVal, minY);
+//             const p2 = toSvg(xVal, minY + ySpan);
+//             return (
+//               <g key={`x-grid-${i}`}>
+//                 <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 3" />
+//                 <text x={p1.x} y={svgHeight - 12} fontSize="9" fill="#94a3b8" textAnchor="middle">
+//                   {Math.round(xVal)}m
+//                 </text>
+//               </g>
+//             );
+//           })}
+
+//           {yTicks.map((yVal, i) => {
+//             const p1 = toSvg(minX, yVal);
+//             const p2 = toSvg(minX + xSpan, yVal);
+//             return (
+//               <g key={`y-grid-${i}`}>
+//                 <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 3" />
+//                 <text x={padding.left - 8} y={p1.y + 3} fontSize="9" fill="#94a3b8" textAnchor="end">
+//                   {yVal.toFixed(1)}
+//                 </text>
+//               </g>
+//             );
+//           })}
+
+//           {/* Drivable Path Corridor Ribbon */}
+//           <path d={corridorPathD} fill="#cbd5e1" fillOpacity="0.45" />
+
+//           {/* Center Trajectory Line */}
+//           <path d={pathD} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeDasharray="5 4" strokeLinecap="round" />
+
+//           {/* Waypoint Endpoint Indicator */}
+//           {mainPoints.length > 0 && (
+//             <circle
+//               cx={mainPoints[mainPoints.length - 1].x}
+//               cy={mainPoints[mainPoints.length - 1].y}
+//               r={4}
+//               fill="#2563eb"
+//             />
+//           )}
+
+//           {/* Ego Vehicle Graphic at (0,0) */}
+//           <g transform={`translate(${egoOrigin.x - 7}, ${egoOrigin.y - 12})`}>
+//             <rect width="14" height="24" rx="3" fill="#3b82f6" stroke="#1d4ed8" strokeWidth="1.5" />
+//             <text x="18" y="15" fontSize="10" fontWeight="600" fill="#334155">
+//               Ego vehicle
+//             </text>
+//           </g>
+
+//           {/* Axis Labels */}
+//           <text x={svgWidth / 2} y={svgHeight - 2} fontSize="10" fill="#64748b" textAnchor="middle" fontWeight="500">
+//             x: forward distance (m)
+//           </text>
+//           <text
+//             x={12}
+//             y={graphH / 2 + padding.top}
+//             fontSize="10"
+//             fill="#64748b"
+//             textAnchor="middle"
+//             fontWeight="500"
+//             transform={`rotate(-90 12 ${graphH / 2 + padding.top})`}
+//           >
+//             y: lateral distance (m), left +
+//           </text>
+//         </svg>
+//       </div>
+//     </div>
+//   );
+// }
 
 export default function VideoAnnotatorPage() {
   const params = useParams<{ sessionId: string }>();
