@@ -996,6 +996,7 @@ export default function AdminDashboard() {
           <thead>
             <tr>
               <th>Request</th>
+              <th>Dataset</th>
               <th>Annotator</th>
               <th>Requested</th>
               <th>Status</th>
@@ -1003,33 +1004,42 @@ export default function AdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            {requests.map(request => (
-              <tr key={request.id}>
-                <td>#{request.id}</td>
-                <td>
-                  Annotator {request.annotatorId}
-                </td>
-                <td>
-                  {formatDate(request.requestedAt)}
-                </td>
-                <td>
-                  <span
-                    className={`status ${request.status.toLowerCase()}`}
-                  >
-                    {request.status}
-                  </span>
-                </td>
-                <td>
-                  {request.annotationSessionId
-                    ? `#${request.annotationSessionId}`
-                    : '—'}
-                </td>
-              </tr>
-            ))}
+            {requests.map(request => {
+              const datasetName =
+                datasets.find(
+                  dataset =>
+                    dataset.id === request.datasetId,
+                )?.name ?? `#${request.datasetId}`;
+
+              return (
+                <tr key={request.id}>
+                  <td>#{request.id}</td>
+                  <td>{datasetName}</td>
+                  <td>
+                    Annotator {request.annotatorId}
+                  </td>
+                  <td>
+                    {formatDate(request.requestedAt)}
+                  </td>
+                  <td>
+                    <span
+                      className={`status ${request.status.toLowerCase()}`}
+                    >
+                      {request.status}
+                    </span>
+                  </td>
+                  <td>
+                    {request.annotationSessionId
+                      ? `#${request.annotationSessionId}`
+                      : '—'}
+                  </td>
+                </tr>
+              );
+            })}
 
             {requests.length === 0 && (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="empty-state">
                     No task requests.
                   </div>
