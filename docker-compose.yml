@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # 1. SQL Server Container (Replaces local SQL Express)
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    user: root
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourPassword123!
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql/data
+
+  # 2. ASP.NET Core Backend + Swagger
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dotnet_backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=KitScenesAnnotationDb;User Id=sa;Password=YourPassword123!;TrustServerCertificate=True;
+    ports:
+      - "5000:5138"
+    depends_on:
+      - sqlserver
+
+  # 3. Python Service / Scripts
+  # python_service:
+  #   build:
+  #     context: ./backend/scripts
+  #     dockerfile: Dockerfile
+  #   container_name: python_scripts
+  #   environment:
+  #     - ANNOTATION_DB_CONNECTION=DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlserver,1433;DATABASE=KitScenesAnnotationDb;UID=sa;PWD=YourPassword123!;TrustServerCertificate=yes;
+  #   depends_on:
+  #     - sqlserver
+
+  # 4. React + Vite + Tailwind Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vite_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  mssql_data:
