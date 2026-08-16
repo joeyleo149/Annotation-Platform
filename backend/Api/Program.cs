@@ -138,6 +138,8 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<
     AdminInvitationEmailSender>();
 
+builder.Services.AddHttpClient();
+
 builder.Services.AddScoped<
     ISurveyService,
     SurveyService>();
