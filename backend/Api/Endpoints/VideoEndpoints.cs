@@ -11,8 +11,15 @@ public static class VideoEndpoints
 
         group.MapGet("/", GetCatalogAsync);
         group.MapGet("/{id:int}", GetVideoAsync);
-        group.MapGet("/{id:int}/stream", StreamVideoAsync);
-        group.MapGet("/{id:int}/thumbnail", GetThumbnailAsync);
+        group.MapGet(
+        "/{id:int}/stream",
+        StreamVideoAsync)
+    .AllowAnonymous();
+
+group.MapGet(
+        "/{id:int}/thumbnail",
+        GetThumbnailAsync)
+    .AllowAnonymous();
         group.MapPatch("/{id:int}/quota", UpdateQuotaAsync);
         group.MapGet("/datasets/{datasetId:int}/metrics", GetDatasetMetricsAsync);
         group.MapPatch("/{id:int}/archive", ArchiveVideoAsync);

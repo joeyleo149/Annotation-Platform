@@ -1,6 +1,8 @@
 const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL ?? '/api';
 
+const tokenStorageKey = 'annotate_pro_token';
+
 export type UploadProgressHandler =
   (percentage: number) => void;
 
@@ -103,6 +105,7 @@ export interface ExpirationResult {
 export interface ManifestUploadResponse {
   message: string;
   datasetId: number;
+
   dataset: {
     id: number;
     name: string;
@@ -111,6 +114,7 @@ export interface ManifestUploadResponse {
     isArchived: boolean;
     createdAt: string;
   };
+
   manifest: unknown;
 }
 
@@ -180,9 +184,37 @@ function createUrl(path: string): string {
   }
 
   const normalizedPath =
-    path.startsWith('/') ? path : `/${path}`;
+    path.startsWith('/')
+      ? path
+      : `/${path}`;
 
   return `${apiBaseUrl}${normalizedPath}`;
+}
+
+function createHeaders(
+  existingHeaders?: HeadersInit,
+  includeContentType = false,
+): Headers {
+  const headers = new Headers(existingHeaders);
+
+  const token =
+    localStorage.getItem(tokenStorageKey);
+
+  if (token) {
+    headers.set(
+      'Authorization',
+      `Bearer ${token}`,
+    );
+  }
+
+  if (includeContentType) {
+    headers.set(
+      'Content-Type',
+      'application/json',
+    );
+  }
+
+  return headers;
 }
 
 async function readResponse<T>(
@@ -206,7 +238,15 @@ async function readResponse<T>(
       data !== null &&
       'message' in data
         ? String(data.message)
-        : `Request failed with status ${response.status}.`;
+        : typeof data === 'object' &&
+            data !== null &&
+            'error' in data
+          ? String(data.error)
+          : typeof data === 'object' &&
+              data !== null &&
+              'title' in data
+            ? String(data.title)
+            : `Request failed with status ${response.status}.`;
 
     throw new Error(message);
   }
@@ -221,15 +261,14 @@ async function request<T>(
   const response = await fetch(
     createUrl(path),
     {
-      credentials: 'include',
       ...options,
-      headers:
-        options.body === undefined
-          ? options.headers
-          : {
-              'Content-Type': 'application/json',
-              ...options.headers,
-            },
+
+      credentials: 'include',
+
+      headers: createHeaders(
+        options.headers,
+        options.body !== undefined,
+      ),
     },
   );
 
@@ -244,8 +283,22 @@ function uploadForm<T>(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
-    xhr.open('POST', createUrl(path));
+    xhr.open(
+      'POST',
+      createUrl(path),
+    );
+
     xhr.withCredentials = true;
+
+    const token =
+      localStorage.getItem(tokenStorageKey);
+
+    if (token) {
+      xhr.setRequestHeader(
+        'Authorization',
+        `Bearer ${token}`,
+      );
+    }
 
     xhr.upload.onprogress = event => {
       if (!event.lengthComputable) {
@@ -270,7 +323,10 @@ function uploadForm<T>(
         data = xhr.responseText;
       }
 
-      if (xhr.status >= 200 && xhr.status < 300) {
+      if (
+        xhr.status >= 200 &&
+        xhr.status < 300
+      ) {
         onProgress?.(100);
         resolve(data as T);
         return;
@@ -281,7 +337,15 @@ function uploadForm<T>(
         data !== null &&
         'message' in data
           ? String(data.message)
-          : `Upload failed with status ${xhr.status}.`;
+          : typeof data === 'object' &&
+              data !== null &&
+              'error' in data
+            ? String(data.error)
+            : typeof data === 'object' &&
+                data !== null &&
+                'title' in data
+              ? String(data.title)
+              : `Upload failed with status ${xhr.status}.`;
 
       reject(new Error(message));
     };
@@ -346,9 +410,20 @@ export const adminApi = {
   ): Promise<ManifestUploadResponse> {
     const formData = new FormData();
 
-    formData.append('file', file);
-    formData.append('datasetName', datasetName);
-    formData.append('datasetType', datasetType);
+    formData.append(
+      'file',
+      file,
+    );
+
+    formData.append(
+      'datasetName',
+      datasetName,
+    );
+
+    formData.append(
+      'datasetType',
+      datasetType,
+    );
 
     return uploadForm<ManifestUploadResponse>(
       '/upload/manifest',
@@ -382,7 +457,10 @@ export const adminApi = {
     );
 
     for (const file of files) {
-      formData.append('files', file);
+      formData.append(
+        'files',
+        file,
+      );
     }
 
     return uploadForm<VideoUploadBatchResponse>(
@@ -403,6 +481,7 @@ export const adminApi = {
       `/videos/${videoId}/quota`,
       {
         method: 'PATCH',
+
         body: JSON.stringify({
           requiredAnnotationCount,
         }),
@@ -424,30 +503,34 @@ export const adminApi = {
     }
 
     if (status) {
-      parameters.set('status', status);
+      parameters.set(
+        'status',
+        status,
+      );
     }
 
     return request<TaskRequestItem[]>(
       `/annotation-sessions/requests?` +
-      parameters.toString(),
+        parameters.toString(),
     );
   },
 
   assignNext(
-  datasetId: number,
-  assignmentDurationDays: number,
-): Promise<AssignmentOutcome> {
-  return request<AssignmentOutcome>(
-    '/annotation-sessions/assign-next',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        datasetId,
-        assignmentDurationDays,
-      }),
-    },
-  );
-},
+    datasetId: number,
+    assignmentDurationDays: number,
+  ): Promise<AssignmentOutcome> {
+    return request<AssignmentOutcome>(
+      '/annotation-sessions/assign-next',
+      {
+        method: 'POST',
+
+        body: JSON.stringify({
+          datasetId,
+          assignmentDurationDays,
+        }),
+      },
+    );
+  },
 
   getSessions():
     Promise<AnnotationSessionItem[]> {
@@ -529,6 +612,7 @@ export const adminApi = {
   ): Promise<void> {
     const parameters = new URLSearchParams({
       format,
+
       includeIncomplete:
         includeIncomplete.toString(),
     });
@@ -536,10 +620,11 @@ export const adminApi = {
     const response = await fetch(
       createUrl(
         `/annotation-exports/${scope}/${id}?` +
-        parameters.toString(),
+          parameters.toString(),
       ),
       {
         credentials: 'include',
+        headers: createHeaders(),
       },
     );
 
@@ -551,7 +636,9 @@ export const adminApi = {
     const content = await response.blob();
 
     const disposition =
-      response.headers.get('Content-Disposition');
+      response.headers.get(
+        'Content-Disposition',
+      );
 
     const filenameMatch =
       disposition?.match(
