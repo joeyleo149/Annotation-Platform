@@ -230,4 +230,30 @@ if (app.Environment.IsDevelopment())
         .MigrateAsync();
 }
 
+// 3. RETRY LOGIC / MIGRATIONS GO HERE (Before app.Run)
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    int retries = 10;
+    while (retries > 0)
+    {
+        try
+        {
+            logger.LogInformation("Connecting to database...");
+            await context.Database.MigrateAsync();
+            logger.LogInformation("Database connected and migrated successfully!");
+            break; // Connection succeeded, break loop and proceed to app.Run()
+        }
+        catch (Exception ex)
+        {
+            retries--;
+            logger.LogWarning($"Database not ready yet ({ex.Message}). Retrying in 3 seconds... ({retries} attempts left)");
+            if (retries == 0) throw;
+            await Task.Delay(3000);
+        }
+    }
+}
+
 app.Run();

@@ -165,20 +165,20 @@ export default function VideoAnnotatorPage() {
     console.log("Next video — not implemented yet.");
   };
 
-  const handleUpdateSegment = async (id: string, updatedFields: Partial<Segment>) => {
-    const target = segments.find(segment => segment.id === id);
-    if (!target) return;
-    const updated = { ...target, ...updatedFields };
-    setSegments(previous => previous.map(segment => segment.id === id ? updated : segment));
-    if (!MOCK_MODE) {
-      try {
-        await updateSegment(Number(id), { annotationSessionId: sessionId, segmentNumber: 1,
-          startTime: secondsToTimeSpan(updated.startTime), endTime: secondsToTimeSpan(updated.endTime), transcript: updated.text });
-      } catch (error: unknown) {
-        setLoadError(error instanceof Error ? error.message : "Unable to update annotation.");
-      }
-    }
-  };
+  // const handleUpdateSegment = async (id: string, updatedFields: Partial<Segment>) => {
+  //   const target = segments.find(segment => segment.id === id);
+  //   if (!target) return;
+  //   const updated = { ...target, ...updatedFields };
+  //   setSegments(previous => previous.map(segment => segment.id === id ? updated : segment));
+  //   if (!MOCK_MODE) {
+  //     try {
+  //       await updateSegment(Number(id), { annotationSessionId: sessionId, segmentNumber: 1,
+  //         startTime: secondsToTimeSpan(updated.startTime), endTime: secondsToTimeSpan(updated.endTime), transcript: updated.text });
+  //     } catch (error: unknown) {
+  //       setLoadError(error instanceof Error ? error.message : "Unable to update annotation.");
+  //     }
+  //   }
+  // };
 
   return (
     <div className="h-screen overflow-hidden bg-slate-50 flex flex-col">
