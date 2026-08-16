@@ -10,6 +10,7 @@ public static class SurveyEndpoints
     {
         var group = routes.MapGroup("/api/survey").WithTags("Survey");
         group.MapGet("/status", GetStatusAsync);
+        group.MapGet("/response", GetResponseAsync);
         group.MapPost("/submit", SubmitAsync);
         return group;
     }
@@ -20,6 +21,21 @@ public static class SurveyEndpoints
         try
         {
             return Results.Ok(new { hasCompletedSurvey = await service.HasCompletedSurveyAsync(annotatorId) });
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.NotFound(new { message = exception.Message });
+        }
+    }
+
+    private static async Task<IResult> GetResponseAsync(ClaimsPrincipal principal, ISurveyService service)
+    {
+        if (!TryGetUserId(principal, out var annotatorId)) return Results.Unauthorized();
+        try
+        {
+            var response = await service.GetSurveyResponseAsync(annotatorId);
+            if (response == null) return Results.NotFound(new { message = "No survey response found." });
+            return Results.Ok(response);
         }
         catch (InvalidOperationException exception)
         {
