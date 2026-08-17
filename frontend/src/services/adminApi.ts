@@ -489,17 +489,11 @@ export const adminApi = {
 
   uploadVideos(
     files: File[],
-    uploadedByAdminId: number,
     datasetId: number,
     requiredAnnotationCount: number,
     onProgress?: UploadProgressHandler,
   ): Promise<VideoUploadBatchResponse> {
     const formData = new FormData();
-
-    formData.append(
-      'uploadedByAdminId',
-      uploadedByAdminId.toString(),
-    );
 
     formData.append(
       'datasetId',

@@ -219,7 +219,10 @@ app.MapTranscriptionEndpoints()
         policy =>
             policy.RequireRole("Annotator"));
 
-app.MapUploadEndpoints();
+app.MapUploadEndpoints()
+    .RequireAuthorization(
+        policy =>
+            policy.RequireRole("Admin"));
 app.MapAnnotationExportEndpoints();
 app.MapDatasetEndpoints();
 

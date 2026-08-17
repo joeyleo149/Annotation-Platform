@@ -18,7 +18,10 @@ public static class AnnotationSessionEndpoints
         group.MapGet("/{id:int}", GetSessionAsync);
         group.MapPost("/{id:int}/complete", CompleteSessionAsync).RequireAuthorization(policy => policy.RequireRole("Annotator"));
         group.MapGet("/requests", GetRequestsAsync);
-        group.MapPost("/requests", CreateRequestAsync);
+        group.MapPost("/requests", CreateRequestAsync)
+            .RequireAuthorization(
+                policy =>
+                    policy.RequireRole("Annotator"));
         group.MapDelete(
             "/requests/{requestId:int}",
             CancelRequestAsync);
@@ -102,19 +105,38 @@ public static class AnnotationSessionEndpoints
 
     private static async Task<IResult> CreateRequestAsync(
         CreateTaskRequest request,
+        ClaimsPrincipal principal,
         AnnotationAssignmentService assignmentService,
+        IConfiguration configuration,
         CancellationToken cancellationToken)
     {
+        if (!int.TryParse(
+                principal.FindFirstValue(
+                    ClaimTypes.NameIdentifier),
+                out var annotatorId) ||
+            annotatorId <= 0)
+        {
+            return Results.Unauthorized();
+        }
+
+        var assignmentDurationDays =
+            configuration.GetValue<int>(
+                "AssignmentProcessing:" +
+                "DefaultAssignmentDurationDays",
+                1);
+
         try
         {
             var result =
-                await assignmentService.CreateRequestAsync(
-                    request.AnnotatorId,
+                await assignmentService
+                    .CreateAndAssignRequestAsync(
+                    annotatorId,
                     request.DatasetId,
+                    assignmentDurationDays,
                     cancellationToken);
 
             return Results.Created(
-                $"/api/annotation-sessions/requests/{result.Id}",
+                $"/api/annotation-sessions/requests/{result.Request.Id}",
                 result);
         }
         catch (ArgumentException exception)
@@ -235,7 +257,6 @@ public static class AnnotationSessionEndpoints
 }
 
 public sealed record CreateTaskRequest(
-    int AnnotatorId,
     int DatasetId);
 
 public sealed record AssignNextRequest(
