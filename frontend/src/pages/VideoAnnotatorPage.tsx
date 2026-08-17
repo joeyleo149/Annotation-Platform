@@ -44,13 +44,16 @@ export default function VideoAnnotatorPage() {
       .then((rows: SegmentResponseDto[]) => {
         if (rows.length > 0) {
           setSegments(
-            rows.map((r) => ({
-              id: String(r.id),
-              startTime: timeSpanToSeconds(r.startTime),
-              endTime: timeSpanToSeconds(r.endTime),
-              text: r.transcript,
-              labels: ["Full Clip"],
-            }))
+            rows.length > 0
+              ? rows.map((r) => ({
+                  id: String(r.id),
+                  startTime: timeSpanToSeconds(r.startTime),
+                  endTime: timeSpanToSeconds(r.endTime),
+                  text: r.transcript,
+                  labels: ["Full Clip"],
+                  segmentNumber: r.segmentNumber,
+                }))
+              : []
           );
         }
       })
@@ -76,6 +79,7 @@ export default function VideoAnnotatorPage() {
           endTime: existingTarget?.endTime ?? SINGLE_ANNOTATION_DURATION,
           text: combinedText,
           labels: ["Full Clip"],
+          segmentNumber: existingTarget?.segmentNumber ?? 1,
         },
       ]);
       return;
@@ -106,6 +110,7 @@ export default function VideoAnnotatorPage() {
             endTime: SINGLE_ANNOTATION_DURATION,
             text: combinedText,
             labels: ["Full Clip"],
+            segmentNumber: created.segmentNumber,
           },
         ]);
       }
@@ -183,6 +188,7 @@ export default function VideoAnnotatorPage() {
             <AnnotationControls
               sessionId={String(sessionId)}
               currentTime={currentTime}
+              videoDuration={SINGLE_ANNOTATION_DURATION}
               segments={segments}
               onSeek={(t) => playerRef.current?.seekTo(t)}
               onSaveDraft={handleSaveDraft}

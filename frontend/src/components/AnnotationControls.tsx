@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { FileText, HelpCircle, Trash2, Send, Mic, Play } from "lucide-react";
+import { getAnswersForSegment, getQuestions, submitAnswer, type QuestionDto } from "../services/Questionanswerservice";
 
 export interface Segment {
   id: string;
@@ -7,11 +8,13 @@ export interface Segment {
   endTime: number;
   text: string;
   labels: string[];
+  segmentNumber: number;
 }
 
 interface AnnotationControlsProps {
   sessionId?: string;
   currentTime: number;
+  videoDuration?: number;
   segments: Segment[];
   onSeek: (seconds: number) => void;
   onSaveDraft: (text: string) => void;
@@ -35,7 +38,6 @@ function parseTimeToSeconds(str: string): number {
   return parts[0] || 0;
 }
 
-// Auto-resizing Textarea component to make the tile auto-expand smoothly
 function AutoResizingTextarea({
   value,
   onChange,
@@ -74,6 +76,7 @@ function AutoResizingTextarea({
 
 export default function AnnotationControls({
   currentTime,
+  videoDuration = 0,
   segments,
   onSeek,
   onSaveDraft,
@@ -82,6 +85,44 @@ export default function AnnotationControls({
 }: AnnotationControlsProps) {
   const [tab, setTab] = useState<"transcription" | "questions">("transcription");
   const [draftText, setDraftText] = useState("");
+  const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [answerDrafts, setAnswerDrafts] = useState<Record<number, string>>({});
+  const [questionError, setQuestionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab !== "questions") return;
+    let cancelled = false;
+    const loadQuestions = async () => {
+      try {
+        const active = await getQuestions(false);
+        const answerGroups = await Promise.all(segments.filter(segment => Number(segment.id) > 0).map(segment => getAnswersForSegment(Number(segment.id))));
+        if (!cancelled) {
+          setQuestions(active);
+          setAnswers(Object.fromEntries(answerGroups.flat().map(answer => [answer.questionId, answer.answer])));
+        }
+      } catch (error) { if (!cancelled) setQuestionError(error instanceof Error ? error.message : "Unable to load questions."); }
+    };
+    void loadQuestions();
+    return () => { cancelled = true; };
+  }, [segments, tab]);
+
+  const isQuestionUnlocked = (question: QuestionDto) => question.segmentNo === 1
+    ? currentTime >= 4
+    : question.segmentNo === 2
+      ? currentTime >= 7
+      : videoDuration > 0 && currentTime >= videoDuration - 0.15;
+
+  const saveQuestionAnswer = async (question: QuestionDto) => {
+    const segment = segments.find(item => item.segmentNumber === question.segmentNo);
+    const answer = answerDrafts[question.id]?.trim();
+    if (!segment || !answer) return;
+    try {
+      await submitAnswer({ segmentResponseId: Number(segment.id), questionId: question.id, answer });
+      setAnswers(previous => ({ ...previous, [question.id]: answer }));
+      setAnswerDrafts(previous => ({ ...previous, [question.id]: "" }));
+    } catch (error) { setQuestionError(error instanceof Error ? error.message : "Unable to save answer."); }
+  };
 
   const handleSubmitDraft = () => {
     if (!draftText.trim()) return;
@@ -213,11 +254,23 @@ export default function AnnotationControls({
               </div>
             ))
           )
-        ) : (
-          <p className="text-sm text-slate-400 italic">
-            Q&A form renders here from session question definitions.
-          </p>
-        )}
+        ) : <div className="space-y-3">
+          {questionError ? <p className="text-sm text-red-600">{questionError}</p> : null}
+          {questions.map(question => {
+            const unlocked = isQuestionUnlocked(question);
+            const segment = segments.find(item => item.segmentNumber === question.segmentNo);
+            const saved = answers[question.id];
+            return <article key={question.id} className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold text-blue-600">Segment {question.segmentNo}</span>{saved ? <span className="text-xs text-emerald-600">Answered</span> : null}</div>
+              <p className="text-sm font-medium text-slate-800">{question.questionText}</p>
+              {!unlocked ? <p className="mt-2 text-xs text-slate-400">Available {question.segmentNo === 1 ? "after 4 seconds" : question.segmentNo === 2 ? "after 7 seconds" : "when the video finishes"}.</p>
+                : saved ? <p className="mt-2 text-sm text-slate-600">{saved}</p>
+                : !segment ? <p className="mt-2 text-xs text-amber-600">Create the matching segment response before answering.</p>
+                : <div className="mt-2 flex gap-2"><input className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" value={answerDrafts[question.id] ?? ""} onChange={event => setAnswerDrafts(previous => ({ ...previous, [question.id]: event.target.value }))} placeholder="Enter your answer" /><button className="rounded-lg bg-blue-600 px-3 text-sm text-white" onClick={() => void saveQuestionAnswer(question)}>Save</button></div>}
+            </article>;
+          })}
+          {questions.length === 0 ? <p className="text-sm text-slate-400 italic">No active questions.</p> : null}
+        </div>}
       </div>
 
       {/* Input Box for Creating New Transcriptions */}

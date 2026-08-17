@@ -115,6 +115,8 @@ app.MapVideoEndpoints().RequireAuthorization();
 app.MapAnnotationSessionEndpoints().RequireAuthorization();
 app.MapSegmentResponseEndpoints().RequireAuthorization();
 app.MapQuestionAnswerEndpoints().RequireAuthorization();
+app.MapQuestionEndpoints()
+    .RequireAuthorization();
 app.MapAuthEndpoints();
 
 
