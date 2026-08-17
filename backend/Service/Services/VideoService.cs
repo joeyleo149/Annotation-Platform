@@ -50,6 +50,9 @@ public sealed class VideoService(AppDbContext context)
                 video.ManifestMatched,
                 video.ScenarioType,
                 video.DrivingInstruction,
+                video.TrajectoryJson,
+                video.ActionsJson,
+                video.OriginalReasoningJson,
                 video.RequiredAnnotationCount,
                 context.AnnotationSessions.Count(
                     session =>
@@ -106,6 +109,9 @@ public sealed class VideoService(AppDbContext context)
                 video.ManifestMatched,
                 video.ScenarioType,
                 video.DrivingInstruction,
+                video.TrajectoryJson,
+                video.ActionsJson,
+                video.OriginalReasoningJson,
                 video.RequiredAnnotationCount,
                 context.AnnotationSessions.Count(
                     session =>
@@ -217,38 +223,42 @@ public sealed class VideoService(AppDbContext context)
             .AsNoTracking()
             .Where(video => video.DatasetId == datasetId);
 
-        var totalVideos = await videos.CountAsync(
-            cancellationToken);
+        var videoProgress = await videos
+            .Select(video => new
+            {
+                video.IsArchived,
+                video.RequiredAnnotationCount,
+                DurationSeconds =
+                    video.DurationSeconds ?? 0,
+                CompletedAnnotationCount =
+                    context.AnnotationSessions.Count(
+                        session =>
+                            session.VideoId == video.Id &&
+                            session.Status ==
+                                AnnotationSessionStatus.Completed)
+            })
+            .ToListAsync(cancellationToken);
 
-        var archivedVideos = await videos.CountAsync(
-            video => video.IsArchived,
-            cancellationToken);
+        var totalVideos = videoProgress.Count;
 
-        var totalRequiredAnnotations = await videos.SumAsync(
-            video => (int?)video.RequiredAnnotationCount,
-            cancellationToken) ?? 0;
+        var archivedVideos = videoProgress.Count(
+            video => video.IsArchived);
 
-        var completedAnnotations =
-            await context.AnnotationSessions.CountAsync(
-                session =>
-                    session.Video.DatasetId == datasetId &&
-                    session.Status ==
-                        AnnotationSessionStatus.Completed,
-                cancellationToken);
+        var totalRequiredAnnotations = videoProgress.Sum(
+            video => video.RequiredAnnotationCount);
 
-        var completedVideos = await videos.CountAsync(
+        var completedAnnotations = videoProgress.Sum(
+            video => Math.Min(
+                video.CompletedAnnotationCount,
+                video.RequiredAnnotationCount));
+
+        var completedVideos = videoProgress.Count(
             video =>
-                context.AnnotationSessions.Count(
-                    session =>
-                        session.VideoId == video.Id &&
-                        session.Status ==
-                            AnnotationSessionStatus.Completed)
-                >= video.RequiredAnnotationCount,
-            cancellationToken);
+                video.CompletedAnnotationCount >=
+                video.RequiredAnnotationCount);
 
-        var totalDurationSeconds = await videos.SumAsync(
-            video => video.DurationSeconds ?? 0,
-            cancellationToken);
+        var totalDurationSeconds = videoProgress.Sum(
+            video => video.DurationSeconds);
 
         var annotatedSeconds =
             await context.AnnotationSessions
@@ -413,6 +423,9 @@ public sealed record VideoCatalogItem(
     bool ManifestMatched,
     string? ScenarioType,
     string? DrivingInstruction,
+    string? TrajectoryJson,
+    string? ActionsJson,
+    string? OriginalReasoningJson,
     int RequiredAnnotationCount,
     int CompletedAnnotationCount,
     int RemainingAnnotationCount,

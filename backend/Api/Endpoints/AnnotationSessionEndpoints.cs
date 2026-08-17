@@ -16,8 +16,12 @@ public static class AnnotationSessionEndpoints
         group.MapGet("/", GetSessionsAsync);
         group.MapGet("/mine", GetMySessionsAsync).RequireAuthorization(policy => policy.RequireRole("Annotator"));
         group.MapGet("/{id:int}", GetSessionAsync);
+        group.MapPost("/{id:int}/complete", CompleteSessionAsync).RequireAuthorization(policy => policy.RequireRole("Annotator"));
         group.MapGet("/requests", GetRequestsAsync);
-        group.MapPost("/requests", CreateRequestAsync);
+        group.MapPost("/requests", CreateRequestAsync)
+            .RequireAuthorization(
+                policy =>
+                    policy.RequireRole("Annotator"));
         group.MapDelete(
             "/requests/{requestId:int}",
             CancelRequestAsync);
@@ -72,6 +76,18 @@ public static class AnnotationSessionEndpoints
             : Results.Ok(session);
     }
 
+    private static async Task<IResult> CompleteSessionAsync(
+        int id,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        var result = await assignmentService.CompleteSessionAsync(id, cancellationToken);
+
+        return result.Success
+            ? Results.Ok(new { message = result.Message })
+            : Results.BadRequest(new { message = result.Message });
+    }
+
     private static async Task<IResult> GetRequestsAsync(
         int? datasetId,
         string? status,
@@ -89,19 +105,38 @@ public static class AnnotationSessionEndpoints
 
     private static async Task<IResult> CreateRequestAsync(
         CreateTaskRequest request,
+        ClaimsPrincipal principal,
         AnnotationAssignmentService assignmentService,
+        IConfiguration configuration,
         CancellationToken cancellationToken)
     {
+        if (!int.TryParse(
+                principal.FindFirstValue(
+                    ClaimTypes.NameIdentifier),
+                out var annotatorId) ||
+            annotatorId <= 0)
+        {
+            return Results.Unauthorized();
+        }
+
+        var assignmentDurationDays =
+            configuration.GetValue<int>(
+                "AssignmentProcessing:" +
+                "DefaultAssignmentDurationDays",
+                1);
+
         try
         {
             var result =
-                await assignmentService.CreateRequestAsync(
-                    request.AnnotatorId,
+                await assignmentService
+                    .CreateAndAssignRequestAsync(
+                    annotatorId,
                     request.DatasetId,
+                    assignmentDurationDays,
                     cancellationToken);
 
             return Results.Created(
-                $"/api/annotation-sessions/requests/{result.Id}",
+                $"/api/annotation-sessions/requests/{result.Request.Id}",
                 result);
         }
         catch (ArgumentException exception)
@@ -222,7 +257,6 @@ public static class AnnotationSessionEndpoints
 }
 
 public sealed record CreateTaskRequest(
-    int AnnotatorId,
     int DatasetId);
 
 public sealed record AssignNextRequest(

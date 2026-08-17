@@ -179,12 +179,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         });
         modelBuilder.Entity<QuestionAnswer>(entity =>
         {
-            entity.HasKey(x => new { x.SegmentResponseId, x.QuestionNumber });
+            entity.HasKey(x => new { x.SegmentResponseId, x.QuestionId });
             entity.Property(x => x.Answer).HasColumnType("nvarchar(max)");
             entity.HasOne(x => x.SegmentResponse).WithMany(x => x.QuestionAnswers).HasForeignKey(x => x.SegmentResponseId);
+            entity.HasOne(x => x.Question).WithMany(x => x.Answers).HasForeignKey(x => x.QuestionId).OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<Question>();
+        modelBuilder.Entity<Question>(entity =>
+        {
+            entity.Property(x => x.QuestionText).HasMaxLength(1000);
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+            entity.HasIndex(x => new { x.DatasetId, x.SegmentNo, x.IsActive });
+            entity.HasOne(x => x.Dataset)
+                .WithMany(x => x.Questions)
+                .HasForeignKey(x => x.DatasetId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.ToTable(table => table.HasCheckConstraint("CK_Questions_SegmentNo", "[SegmentNo] IN (1, 2, 3)"));
+        });
         modelBuilder.Entity<AnnotatorSurvey>(entity =>
         {
             entity.HasIndex(survey => survey.AnnotatorId).IsUnique();

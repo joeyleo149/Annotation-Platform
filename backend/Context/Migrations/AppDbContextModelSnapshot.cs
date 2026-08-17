@@ -342,16 +342,30 @@ namespace Context.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("QuestionNumber")
+                    b.Property<int?>("DatasetId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Text")
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("QuestionText")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("SegmentNo")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Questions");
+                    b.HasIndex("DatasetId", "SegmentNo", "IsActive");
+
+                    b.ToTable("Questions", t =>
+                        {
+                            t.HasCheckConstraint("CK_Questions_SegmentNo", "[SegmentNo] IN (1, 2, 3)");
+                        });
                 });
 
             modelBuilder.Entity("Context.Entities.QuestionAnswer", b =>
@@ -359,14 +373,16 @@ namespace Context.Migrations
                     b.Property<int>("SegmentResponseId")
                         .HasColumnType("int");
 
-                    b.Property<int>("QuestionNumber")
+                    b.Property<int>("QuestionId")
                         .HasColumnType("int");
 
                     b.Property<string>("Answer")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.HasKey("SegmentResponseId", "QuestionNumber");
+                    b.HasKey("SegmentResponseId", "QuestionId");
+
+                    b.HasIndex("QuestionId");
 
                     b.ToTable("QuestionAnswers");
                 });
@@ -580,13 +596,31 @@ namespace Context.Migrations
                     b.Navigation("Annotator");
                 });
 
+            modelBuilder.Entity("Context.Entities.Question", b =>
+                {
+                    b.HasOne("Context.Entities.Dataset", "Dataset")
+                        .WithMany("Questions")
+                        .HasForeignKey("DatasetId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Dataset");
+                });
+
             modelBuilder.Entity("Context.Entities.QuestionAnswer", b =>
                 {
+                    b.HasOne("Context.Entities.Question", "Question")
+                        .WithMany("Answers")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Context.Entities.SegmentResponse", "SegmentResponse")
                         .WithMany("QuestionAnswers")
                         .HasForeignKey("SegmentResponseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Question");
 
                     b.Navigation("SegmentResponse");
                 });
@@ -643,7 +677,14 @@ namespace Context.Migrations
                 {
                     b.Navigation("AnnotationTaskRequests");
 
+                    b.Navigation("Questions");
+
                     b.Navigation("Videos");
+                });
+
+            modelBuilder.Entity("Context.Entities.Question", b =>
+                {
+                    b.Navigation("Answers");
                 });
 
             modelBuilder.Entity("Context.Entities.SegmentResponse", b =>

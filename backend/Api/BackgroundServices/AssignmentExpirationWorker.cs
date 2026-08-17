@@ -48,6 +48,12 @@ public sealed class AssignmentExpirationWorker(
                             reassignmentDurationDays,
                             stoppingToken);
 
+                var waitingResult =
+                    await assignmentService
+                        .ProcessWaitingRequestsAsync(
+                            reassignmentDurationDays,
+                            stoppingToken);
+
                 if (result.ExpiredSessionCount > 0)
                 {
                     logger.LogInformation(
@@ -55,6 +61,14 @@ public sealed class AssignmentExpirationWorker(
                         "and reassigned {ReassignedCount}.",
                         result.ExpiredSessionCount,
                         result.ReassignedSessionCount);
+                }
+
+                if (waitingResult.AssignedSessionCount > 0)
+                {
+                    logger.LogInformation(
+                        "Automatically assigned {AssignedCount} " +
+                        "waiting annotation requests.",
+                        waitingResult.AssignedSessionCount);
                 }
             }
             catch (OperationCanceledException)

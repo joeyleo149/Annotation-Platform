@@ -9,8 +9,8 @@ const menus = {
     ['Add Admin', '/admin/add-admin']
   ],
   Annotator: [
-    ['Annotate', '/annotator/videos'],
-    ['My Annotations', '/annotator/annotations'],
+    ['Discover', '/annotator/annotations'],
+    ['My Annotations', '/annotator/videos'],
     ['Survey', '/survey'],
     ['Profile', '/annotator/profile']
   ]
