@@ -387,6 +387,7 @@ export default function VideoAnnotatorPage() {
                   endTime: timeSpanToSeconds(r.endTime),
                   text: r.transcript,
                   labels: ["Full Clip"],
+                  segmentNumber: r.segmentNumber,
                 }))
               : []
           );
@@ -425,6 +426,7 @@ export default function VideoAnnotatorPage() {
           endTime: existingTarget?.endTime ?? singleAnnotationDuration,
           text: combinedText,
           labels: ["Full Clip"],
+          segmentNumber: existingTarget?.segmentNumber ?? 1,
         },
       ]);
       return;
@@ -455,6 +457,7 @@ export default function VideoAnnotatorPage() {
             endTime: singleAnnotationDuration,
             text: combinedText,
             labels: ["Full Clip"],
+            segmentNumber: created.segmentNumber,
           },
         ]);
       }
@@ -553,6 +556,7 @@ export default function VideoAnnotatorPage() {
         <AnnotationControls
           sessionId={String(sessionId)}
           currentTime={currentTime}
+          videoDuration={singleAnnotationDuration}
           segments={segments}
           isLastVideo={IS_LAST_VIDEO}
           onSeek={(t) => playerRef.current?.seekTo(t)}

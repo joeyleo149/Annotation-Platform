@@ -166,10 +166,10 @@ public sealed class AnnotationExportService(
                                 segment.SubmittedAt,
                                 segment.QuestionAnswers
                                     .OrderBy(answer =>
-                                        answer.QuestionNumber)
+                                        answer.QuestionId)
                                     .Select(answer =>
                                         new QuestionAnswerExport(
-                                            answer.QuestionNumber,
+                                            answer.QuestionId,
                                             answer.Answer))
                                     .ToList()))
                         .ToList()))
@@ -244,7 +244,7 @@ public sealed class AnnotationExportService(
                 "SegmentNumber",
                 "Transcript",
                 "SegmentSubmittedAt",
-                "QuestionNumber",
+                "QuestionId",
                 "Answer"
             ]);
 
@@ -346,7 +346,7 @@ public sealed class AnnotationExportService(
                 CultureInfo.InvariantCulture),
             segment?.Transcript,
             segment?.SubmittedAt.ToString("O"),
-            answer?.QuestionNumber.ToString(
+            answer?.QuestionId.ToString(
                 CultureInfo.InvariantCulture),
             answer?.Answer
         ];
@@ -462,5 +462,5 @@ public sealed record SegmentAnnotationExport(
         QuestionAnswers);
 
 public sealed record QuestionAnswerExport(
-    int QuestionNumber,
+    int QuestionId,
     string Answer);

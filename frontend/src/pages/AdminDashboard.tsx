@@ -19,6 +19,7 @@ import {
 import './AdminDashboard.css';
 import { getCurrentUser, logout } from '../services/authService';
 import AddAdminPage from './AddAdminPage';
+import { AddQuestionPage, QuestionsPage } from './QuestionManagementPage';
 
 type DashboardView =
   | 'overview'
@@ -28,7 +29,9 @@ type DashboardView =
   | 'requests'
   | 'sessions'
   | 'uploads'
-  | 'addAdmin';
+  | 'addAdmin'
+  | 'addQuestion'
+  | 'questions';
 
 const navigation: {
   id: DashboardView;
@@ -47,6 +50,8 @@ const navigation: {
   { id: 'sessions', label: 'Sessions', icon: '◷' },
   { id: 'uploads', label: 'Uploads', icon: '↑' },
   { id: 'addAdmin', label: 'Add Admin', icon: '+' },
+  { id: 'addQuestion', label: 'Add Question', icon: '?' },
+  { id: 'questions', label: 'Questions', icon: '≡' },
 ];
 
 function formatDate(value: string | null): string {
@@ -148,6 +153,8 @@ export default function AdminDashboard() {
       ) ?? null,
     [datasets, selectedDatasetId],
   );
+
+  const hidesDatasetControls = view === 'addAdmin' || view === 'addQuestion' || view === 'questions';
 
   const filteredVideos = useMemo(() => {
     const normalizedSearch =
@@ -1233,6 +1240,10 @@ export default function AdminDashboard() {
         return renderUploads();
       case 'addAdmin':
         return <AddAdminPage />;
+      case 'addQuestion':
+        return <AddQuestionPage />;
+      case 'questions':
+        return <QuestionsPage />;
       default:
         return renderOverview();
     }
@@ -1292,7 +1303,7 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          {view !== 'addAdmin' && <div className="header-actions">
+          {!hidesDatasetControls && <div className="header-actions">
             <select
               value={selectedDatasetId ?? ''}
               onChange={event =>
@@ -1325,7 +1336,7 @@ export default function AdminDashboard() {
         </header>
 
         <div className="admin-content">
-          {view !== 'addAdmin' && selectedDataset && (
+          {!hidesDatasetControls && selectedDataset && (
             <div className="dataset-context">
               <span>
                 Dataset

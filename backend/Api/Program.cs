@@ -207,6 +207,8 @@ app.MapSegmentResponseEndpoints()
 app.MapQuestionAnswerEndpoints()
     .RequireAuthorization();
 
+app.MapQuestionEndpoints()
+    .RequireAuthorization();
 app.MapAuthEndpoints();
 
 app.MapSurveyEndpoints()

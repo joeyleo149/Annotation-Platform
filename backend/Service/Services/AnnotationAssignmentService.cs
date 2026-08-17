@@ -527,21 +527,23 @@ public sealed class AnnotationAssignmentService(
                 "Add a transcription before finishing this video.");
         }
 
-        var totalQuestions = await context.Questions
-            .CountAsync(cancellationToken);
+        var activeQuestions = await context.Questions
+            .Where(question => question.IsActive)
+            .Select(question => new { question.Id, question.SegmentNo })
+            .ToListAsync(cancellationToken);
 
-        if (totalQuestions > 0)
+        if (activeQuestions.Count > 0)
         {
             var missingAnswers = session.SegmentResponses
                 .Any(segment =>
                 {
-                    var answeredQuestionNumbers = segment.QuestionAnswers
-                        .Select(answer => answer.QuestionNumber)
+                    var answeredQuestionIds = segment.QuestionAnswers
+                        .Select(answer => answer.QuestionId)
                         .ToHashSet();
 
-                    return Enumerable.Range(1, totalQuestions)
-                        .Any(questionNumber =>
-                            !answeredQuestionNumbers.Contains(questionNumber));
+                    return activeQuestions
+                        .Where(question => question.SegmentNo == segment.SegmentNumber)
+                        .Any(question => !answeredQuestionIds.Contains(question.Id));
                 });
 
             if (missingAnswers)
