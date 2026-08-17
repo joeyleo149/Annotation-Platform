@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Claims;
 using Context;
 using Context.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -238,6 +239,7 @@ public static class UploadEndpoints
 }
 private static async Task<IResult> UploadVideosAsync(
     HttpRequest request,
+    ClaimsPrincipal principal,
     VideoUploadService videoUploadService,
     AppDbContext database,
     IConfiguration configuration,
@@ -256,19 +258,29 @@ private static async Task<IResult> UploadVideosAsync(
     var form = await request.ReadFormAsync(
         cancellationToken);
 
-    if (!form.TryGetValue(
-            "uploadedByAdminId",
-            out var adminIdValues) ||
-        !int.TryParse(
-            adminIdValues.FirstOrDefault(),
+    if (!int.TryParse(
+            principal.FindFirstValue(
+                ClaimTypes.NameIdentifier),
             out var uploadedByAdminId) ||
         uploadedByAdminId <= 0)
     {
-        return Results.BadRequest(new
-        {
-            message =
-                "A valid uploadedByAdminId form value is required."
-        });
+        return Results.Unauthorized();
+    }
+
+    var adminExists = await database.Admins
+        .AsNoTracking()
+        .AnyAsync(
+            admin => admin.Id == uploadedByAdminId,
+            cancellationToken);
+
+    if (!adminExists)
+    {
+        return Results.Forbid();
+    }
+
+    if (!principal.IsInRole("Admin"))
+    {
+        return Results.Forbid();
     }
 
     if (!form.TryGetValue(

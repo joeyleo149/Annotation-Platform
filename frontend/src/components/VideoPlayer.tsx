@@ -10,7 +10,7 @@ export interface VideoPlayerHandle {
 }
 
 interface VideoPlayerProps {
-  src: string;
+  src?: string;
   fps?: number;
   hasAudio?: boolean;
   hasCaptions?: boolean;
@@ -118,16 +118,18 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       >
         {/* Video Area */}
         <div className="relative flex-1 min-h-0 w-full flex items-center justify-center bg-black overflow-hidden">
-          <video
-            ref={videoRef}
-            src={src}
-            className="max-w-full max-h-full object-contain block cursor-pointer"
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={() => setDuration(videoRef.current?.duration ?? 0)}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onClick={togglePlay}
-          />
+          {src ? (
+            <video
+              ref={videoRef}
+              src={src}
+              className="max-w-full max-h-full object-contain block cursor-pointer"
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={() => setDuration(videoRef.current?.duration ?? 0)}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onClick={togglePlay}
+            />
+          ) : null}
         </div>
 
         {/* Integrated Control Bar */}

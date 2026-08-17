@@ -110,9 +110,6 @@ export default function AdminDashboard() {
   const [error, setError] =
     useState<string | null>(null);
 
-  const [assignmentDuration, setAssignmentDuration] =
-    useState('1');
-
   const [previewVideo, setPreviewVideo] =
     useState<VideoCatalogItem | null>(null);
 
@@ -143,7 +140,6 @@ export default function AdminDashboard() {
   const [videoFiles, setVideoFiles] =
     useState<File[]>([]);
 
-  const [adminId, setAdminId] = useState('1');
   const [requiredAnnotations, setRequiredAnnotations] =
     useState('3');
 
@@ -199,14 +195,27 @@ export default function AdminDashboard() {
     [requests],
   );
 
+  const selectedVideoIds = useMemo(
+    () => new Set(videos.map(video => video.id)),
+    [videos],
+  );
+
+  const selectedDatasetSessions = useMemo(
+    () =>
+      sessions.filter(session =>
+        selectedVideoIds.has(session.videoId),
+      ),
+    [sessions, selectedVideoIds],
+  );
+
   const activeSessions = useMemo(
     () =>
-      sessions.filter(
+      selectedDatasetSessions.filter(
         session =>
           session.status === 'Assigned' ||
           session.status === 'InProgress',
       ),
-    [sessions],
+    [selectedDatasetSessions],
   );
 
   const loadDashboard = useCallback(async () => {
@@ -342,14 +351,8 @@ export default function AdminDashboard() {
       return;
     }
 
-    const parsedAdminId = Number(adminId);
     const parsedRequiredAnnotations =
       Number(requiredAnnotations);
-
-    if (!Number.isInteger(parsedAdminId) || parsedAdminId < 1) {
-      setError('Enter a valid administrator ID.');
-      return;
-    }
 
     if (
       !Number.isInteger(parsedRequiredAnnotations) ||
@@ -369,7 +372,6 @@ export default function AdminDashboard() {
     try {
       const result = await adminApi.uploadVideos(
         videoFiles,
-        parsedAdminId,
         selectedDatasetId,
         parsedRequiredAnnotations,
         setVideoUploadProgress,
@@ -420,32 +422,6 @@ export default function AdminDashboard() {
           quota,
         ),
       'Annotation quota updated.',
-    );
-  };
-
-  const handleAssignNext = () => {
-    if (selectedDatasetId === null) {
-      setError('Select a dataset first.');
-      return;
-    }
-
-
-    const durationDays = Number(assignmentDuration);
-
-    if (!Number.isInteger(durationDays) || durationDays < 1) {
-      setError(
-        'Assignment duration must be at least one day.',
-      );
-      return;
-    }
-
-    void runAction(
-      () =>
-        adminApi.assignNext(
-          selectedDatasetId,
-          durationDays,
-        ),
-      'The next task was assigned successfully.',
     );
   };
 
@@ -553,8 +529,10 @@ export default function AdminDashboard() {
           <article className="metric-card">
             <span className="metric-icon orange">⇄</span>
             <div>
-              <p>Waiting requests</p>
-              <strong>{waitingRequests.length}</strong>
+              <p>Remaining annotations</p>
+              <strong>
+                {metrics?.remainingAnnotations ?? 0}
+              </strong>
               <small>
                 {activeSessions.length} active sessions
               </small>
@@ -581,7 +559,7 @@ export default function AdminDashboard() {
           <article className="panel progress-panel">
             <div className="panel-heading">
               <div>
-                <h2>Dataset progress</h2>
+                <h2>Annotation progress</h2>
                 <p>
                   Annotation completion for the selected
                   dataset.
@@ -603,19 +581,19 @@ export default function AdminDashboard() {
                 <strong>
                   {metrics?.completedAnnotations ?? 0}
                 </strong>
-                <span>Completed</span>
+                <span>Completed annotations</span>
               </div>
               <div>
                 <strong>
                   {metrics?.remainingAnnotations ?? 0}
                 </strong>
-                <span>Remaining</span>
+                <span>Remaining annotations</span>
               </div>
               <div>
                 <strong>
                   {metrics?.totalRequiredAnnotations ?? 0}
                 </strong>
-                <span>Required</span>
+                <span>Required annotations</span>
               </div>
             </div>
           </article>
@@ -623,43 +601,43 @@ export default function AdminDashboard() {
           <article className="panel">
             <div className="panel-heading">
               <div>
-                <h2>Pending requests</h2>
-                <p>Annotators waiting for a task.</p>
+                <h2>Recent assignments</h2>
+                <p>Latest sessions for this dataset.</p>
               </div>
               <button
                 className="text-button"
-                onClick={() => setView('requests')}
+                onClick={() => setView('sessions')}
               >
                 View all
               </button>
             </div>
 
             <div className="compact-list">
-              {waitingRequests.slice(0, 4).map(request => (
+              {selectedDatasetSessions.slice(0, 4).map(session => (
                 <div
                   className="compact-row"
-                  key={request.id}
+                  key={session.id}
                 >
                   <span className="avatar">
-                    A{request.annotatorId}
+                    A{session.annotatorId}
                   </span>
                   <div>
                     <strong>
-                      Annotator {request.annotatorId}
+                      Video #{session.videoId}
                     </strong>
                     <small>
-                      {formatDate(request.requestedAt)}
+                      {formatDate(session.assignedAt)}
                     </small>
                   </div>
-                  <span className="status waiting">
-                    Waiting
+                  <span className={`status ${session.status.toLowerCase()}`}>
+                    {session.status}
                   </span>
                 </div>
               ))}
 
-              {waitingRequests.length === 0 && (
+              {selectedDatasetSessions.length === 0 && (
                 <div className="empty-state">
-                  No waiting requests.
+                  No assignments yet.
                 </div>
               )}
             </div>
@@ -966,35 +944,8 @@ export default function AdminDashboard() {
         <div>
           <h2>Annotation requests</h2>
           <p>
-            Approve requests using fair automatic assignment.
+            Review automatically processed task requests.
           </p>
-        </div>
-
-        <div className="assignment-controls">
-          <label>
-            Duration
-            <input
-              type="number"
-              min="1"
-              max="365"
-              value={assignmentDuration}
-              onChange={event =>
-                setAssignmentDuration(event.target.value)
-              }
-            />
-            <span>days</span>
-          </label>
-
-          <button
-            className="primary-button"
-            disabled={
-              actionBusy ||
-              waitingRequests.length === 0
-            }
-            onClick={handleAssignNext}
-          >
-            Assign next
-          </button>
         </div>
       </div>
 
@@ -1003,6 +954,7 @@ export default function AdminDashboard() {
           <thead>
             <tr>
               <th>Request</th>
+              <th>Dataset</th>
               <th>Annotator</th>
               <th>Requested</th>
               <th>Status</th>
@@ -1010,33 +962,42 @@ export default function AdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            {requests.map(request => (
-              <tr key={request.id}>
-                <td>#{request.id}</td>
-                <td>
-                  Annotator {request.annotatorId}
-                </td>
-                <td>
-                  {formatDate(request.requestedAt)}
-                </td>
-                <td>
-                  <span
-                    className={`status ${request.status.toLowerCase()}`}
-                  >
-                    {request.status}
-                  </span>
-                </td>
-                <td>
-                  {request.annotationSessionId
-                    ? `#${request.annotationSessionId}`
-                    : '—'}
-                </td>
-              </tr>
-            ))}
+            {requests.map(request => {
+              const datasetName =
+                datasets.find(
+                  dataset =>
+                    dataset.id === request.datasetId,
+                )?.name ?? `#${request.datasetId}`;
+
+              return (
+                <tr key={request.id}>
+                  <td>#{request.id}</td>
+                  <td>{datasetName}</td>
+                  <td>
+                    Annotator {request.annotatorId}
+                  </td>
+                  <td>
+                    {formatDate(request.requestedAt)}
+                  </td>
+                  <td>
+                    <span
+                      className={`status ${request.status.toLowerCase()}`}
+                    >
+                      {request.status}
+                    </span>
+                  </td>
+                  <td>
+                    {request.annotationSessionId
+                      ? `#${request.annotationSessionId}`
+                      : '—'}
+                  </td>
+                </tr>
+              );
+            })}
 
             {requests.length === 0 && (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="empty-state">
                     No task requests.
                   </div>
@@ -1208,18 +1169,6 @@ export default function AdminDashboard() {
         <p>
           Add reconstructed videos to the selected dataset.
         </p>
-
-        <label>
-          Administrator ID
-          <input
-            type="number"
-            min="1"
-            value={adminId}
-            onChange={event =>
-              setAdminId(event.target.value)
-            }
-          />
-        </label>
 
         <label>
           Required annotations per video

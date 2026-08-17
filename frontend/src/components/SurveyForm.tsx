@@ -1,15 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { submitSurvey, type SubmitSurveyPayload } from '../services/SurveyService.ts';
+import { submitSurvey, type SubmitSurveyPayload, type SurveyResponse } from '../services/SurveyService';
+// If countries.ts is in frontend/src/data/countries.ts:
+import { COUNTRIES } from '../data/countries';
+// (Note: If countries.ts is located in frontend/data/countries.ts, use '../../data/countries')
 
 interface SurveyFormProps {
   onSuccess: () => void;
+  initialData?: SurveyResponse | null;
 }
-
-const COUNTRIES = [
-  "Egypt", "Germany", "United States", "United Kingdom", "Canada", "Australia",
-  "France", "Saudi Arabia", "United Arab Emirates", "India", "Jordan", "Kuwait",
-  "Netherlands", "Sweden", "Switzerland", "Spain", "Italy", "Japan", "South Korea"
-];
 
 const DRIVING_FREQUENCIES = [
   { id: "Daily", title: "Daily / Near Daily", desc: "5–7 days per week" },
@@ -19,7 +17,7 @@ const DRIVING_FREQUENCIES = [
   { id: "Inactive", title: "Inactive / Non-Driver", desc: "Licensed, but never drive" }
 ];
 
-export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
+export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess, initialData }) => {
   const [step, setStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -32,18 +30,35 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState<boolean>(false);
   const [drivingFrequency, setDrivingFrequency] = useState<string>('');
   
-  // Q4 Scenarios
+  // Scenarios
   const [scenarioNighttime, setScenarioNighttime] = useState<boolean>(false);
   const [scenarioSnowy, setScenarioSnowy] = useState<boolean>(false);
   const [scenarioRain, setScenarioRain] = useState<boolean>(false);
   const [scenarioConstruction, setScenarioConstruction] = useState<boolean>(false);
   const [scenarioNone, setScenarioNone] = useState<boolean>(false);
 
-  // Q5 & Q6
+  // Background
   const [hasPriorExperience, setHasPriorExperience] = useState<boolean | null>(null);
   const [hasAccidents, setHasAccidents] = useState<boolean | null>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (initialData) {
+      setHasDriverLicense(initialData.hasDriverLicense);
+      setYearsOfDrivingExperience(initialData.yearsOfDrivingExperience);
+      setSelectedCountry(initialData.primaryDrivingCountry);
+      setCountrySearch(initialData.primaryDrivingCountry);
+      setDrivingFrequency(initialData.drivingFrequency);
+      setScenarioNighttime(initialData.drivingScenarioNighttime);
+      setScenarioSnowy(initialData.drivingScenarioSnowyWeather);
+      setScenarioRain(initialData.drivingScenarioHeavyRain);
+      setScenarioConstruction(initialData.drivingScenarioConstructionZone);
+      setScenarioNone(initialData.drivingScenarioNone);
+      setHasPriorExperience(initialData.hasPriorDatasetAnnotationExperience);
+      setHasAccidents(initialData.hasAccidentsInLastFiveYears);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -55,11 +70,12 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Filter against the full global country list
   const filteredCountries = useMemo(() => {
     if (!countrySearch.trim()) return COUNTRIES;
-    return COUNTRIES.filter(c => c.toLowerCase().startsWith(countrySearch.toLowerCase()));
+    const term = countrySearch.toLowerCase();
+    return COUNTRIES.filter((c) => c.toLowerCase().includes(term));
   }, [countrySearch]);
-
   const handleScenarioChange = (type: 'night' | 'snow' | 'rain' | 'construction' | 'none') => {
     if (type === 'none') {
       const nextNone = !scenarioNone;
@@ -163,16 +179,14 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
       await submitSurvey(payload);
       onSuccess();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Submission failed. Please try again.');
+      setErrorMessage(err.response?.data?.message || err.message || 'Submission failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="card w-full rounded-none p-8 sm:p-10 transition-all">
-      
-      {/* Visual Stepper */}
+    <div className="card w-full rounded-none p-8 sm:p-10 transition-all bg-white border border-slate-200 rounded-3xl shadow-sm">
       <div className="mb-8">
         <div className="flex justify-between items-center mb-3">
           <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
@@ -193,15 +207,12 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
       </div>
 
       {errorMessage && (
-        <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium flex items-center gap-2.5 animate-shake">
-          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-          </svg>
+        <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium flex items-center gap-2.5">
           <span>{errorMessage}</span>
         </div>
       )}
 
-      {/* --- STEP 1 --- */}
+      {/* Step 1 */}
       {step === 1 && (
         <div className="space-y-6">
           <div>
@@ -235,7 +246,7 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
             </label>
             <input id="years-driving" type="number" min="0" max="100" required
               value={yearsOfDrivingExperience}
-              onChange={(event) => setYearsOfDrivingExperience(Number(event.target.value))}
+              onChange={(e) => setYearsOfDrivingExperience(Number(e.target.value))}
               className="w-full px-4 py-3 bg-white rounded-xl border border-slate-200 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm" />
           </div>
 
@@ -246,7 +257,7 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Type or select country (e.g., Egypt, Germany)..."
+                placeholder="Type or select country..."
                 value={countrySearch}
                 onFocus={() => setIsCountryDropdownOpen(true)}
                 onChange={(e) => {
@@ -254,44 +265,33 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
                   setSelectedCountry(e.target.value);
                   setIsCountryDropdownOpen(true);
                 }}
-                className="w-full px-4 py-3 bg-white rounded-xl border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm transition"
+                className="w-full px-4 py-3 bg-white rounded-xl border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 text-sm"
               />
-              <div className="absolute right-3.5 top-3.5 text-slate-400 pointer-events-none">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
             </div>
 
             {isCountryDropdownOpen && (
               <ul className="absolute z-20 w-full mt-2 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-xl text-sm divide-y divide-slate-50 py-1">
-                {filteredCountries.length > 0 ? (
-                  filteredCountries.map((c) => (
-                    <li
-                      key={c}
-                      onClick={() => {
-                        setSelectedCountry(c);
-                        setCountrySearch(c);
-                        setIsCountryDropdownOpen(false);
-                      }}
-                      className="px-4 py-2.5 hover:bg-blue-50 hover:text-blue-600 cursor-pointer text-slate-700 font-medium transition flex items-center justify-between"
-                    >
-                      <span>{c}</span>
-                      {selectedCountry === c && <span className="text-blue-600 text-xs">✓</span>}
-                    </li>
-                  ))
-                ) : (
-                  <li className="px-4 py-3 text-slate-400 text-xs italic">
-                    Press tab or click outside to keep "{countrySearch}"
+                {filteredCountries.map((c) => (
+                  <li
+                    key={c}
+                    onClick={() => {
+                      setSelectedCountry(c);
+                      setCountrySearch(c);
+                      setIsCountryDropdownOpen(false);
+                    }}
+                    className="px-4 py-2.5 hover:bg-blue-50 hover:text-blue-600 cursor-pointer text-slate-700 font-medium transition flex items-center justify-between"
+                  >
+                    <span>{c}</span>
+                    {selectedCountry === c && <span className="text-blue-600 text-xs">✓</span>}
                   </li>
-                )}
+                ))}
               </ul>
             )}
           </div>
         </div>
       )}
 
-      {/* --- STEP 2 --- */}
+      {/* Step 2 */}
       {step === 2 && (
         <div className="space-y-6">
           <div>
@@ -376,12 +376,12 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
         </div>
       )}
 
-      {/* --- STEP 3 --- */}
+      {/* Step 3 */}
       {step === 3 && (
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-slate-900 mb-2">
-              5. Have you ever annotated datasets related to autonomous driving (e.g. NuScenes, Waymo)?
+              5. Have you ever annotated datasets related to autonomous driving? (eg. KITScenes,NUScenes, etc.)
             </label>
             <div className="grid grid-cols-2 gap-3">
               {[true, false].map((val) => (
@@ -425,7 +425,7 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
         </div>
       )}
 
-      {/* Footer Controls */}
+      {/* Footer */}
       <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between gap-4">
         {step > 1 ? (
           <button
@@ -452,7 +452,7 @@ export const SurveyForm: React.FC<SurveyFormProps> = ({ onSuccess }) => {
             disabled={isSubmitting}
             className="py-3.5 px-7 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm hover:shadow transition-all text-sm ml-auto disabled:opacity-50"
           >
-            {isSubmitting ? 'Unlocking Workspace...' : 'Complete & Unlock'}
+            {isSubmitting ? 'Saving...' : initialData ? 'Save Changes' : 'Submit Survey'}
           </button>
         )}
       </div>

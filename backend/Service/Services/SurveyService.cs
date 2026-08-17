@@ -8,15 +8,8 @@ using System.Threading.Tasks;
 
 public interface ISurveyService
 {
-    /// <summary>
-    /// Checks whether the specified annotator has completed the survey.
-    /// </summary>
     Task<bool> HasCompletedSurveyAsync(int annotatorId);
-
-    /// <summary>
-    /// Binds demographic stats to the survey entity, validates answers, 
-    /// persists the survey, and updates the annotator's status.
-    /// </summary>
+    Task<AnnotatorSurvey?> GetSurveyResponseAsync(int annotatorId);
     Task SubmitSurveyAsync(int annotatorId, AnnotatorSurvey survey);
 }
 
@@ -43,38 +36,67 @@ public class SurveyService : ISurveyService
         return annotator.HasCompletedSurvey;
     }
 
-    public async Task SubmitSurveyAsync(int annotatorId, AnnotatorSurvey survey)
+    public async Task<AnnotatorSurvey?> GetSurveyResponseAsync(int annotatorId)
     {
-        // 1. Fetch user account
-        var annotator = await _context.Set<Annotator>()
-            .FirstOrDefaultAsync(a => a.Id == annotatorId);
+        return await _context.Set<AnnotatorSurvey>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.AnnotatorId == annotatorId);
+    }
 
-        if (annotator == null)
-        {
-            throw new InvalidOperationException($"Annotator with ID {annotatorId} was not found.");
-        }
+    public async Task SubmitSurveyAsync(int annotatorId, AnnotatorSurvey survey)
+{
+    // 1. Fetch annotator record
+    var annotator = await _context.Set<Annotator>()
+        .FirstOrDefaultAsync(a => a.Id == annotatorId);
 
-        if (annotator.HasCompletedSurvey)
-        {
-            throw new InvalidOperationException("You have already completed the background survey.");
-        }
+    if (annotator == null)
+    {
+        throw new InvalidOperationException($"Annotator with ID {annotatorId} was not found.");
+    }
 
-        // 2. Validate input fields directly on entity
-        ValidateSurvey(survey);
+    // 2. Validate input fields
+    ValidateSurvey(survey);
 
-        // 3. Snapshot demographic fields onto the entity before saving
+    // 3. Check if survey already exists (Edit flow vs New submission)
+    var existingSurvey = await _context.Set<AnnotatorSurvey>()
+        .FirstOrDefaultAsync(s => s.AnnotatorId == annotatorId);
+
+    if (existingSurvey != null)
+    {
+        // Update existing database entry
+        existingSurvey.HasDriverLicense = survey.HasDriverLicense;
+        existingSurvey.YearsOfDrivingExperience = survey.YearsOfDrivingExperience;
+        existingSurvey.PrimaryDrivingCountry = survey.PrimaryDrivingCountry;
+        existingSurvey.DrivingFrequency = survey.DrivingFrequency;
+        existingSurvey.DrivingScenarioNighttime = survey.DrivingScenarioNighttime;
+        existingSurvey.DrivingScenarioSnowyWeather = survey.DrivingScenarioSnowyWeather;
+        existingSurvey.DrivingScenarioHeavyRain = survey.DrivingScenarioHeavyRain;
+        existingSurvey.DrivingScenarioConstructionZone = survey.DrivingScenarioConstructionZone;
+        existingSurvey.DrivingScenarioNone = survey.DrivingScenarioNone;
+        existingSurvey.HasPriorDatasetAnnotationExperience = survey.HasPriorDatasetAnnotationExperience;
+        existingSurvey.HasAccidentsInLastFiveYears = survey.HasAccidentsInLastFiveYears;
+        existingSurvey.SubmittedAt = DateTime.UtcNow;
+
+        // Keep demographic snapshot current
+        existingSurvey.Nationality = annotator.Nationality;
+        existingSurvey.Gender = annotator.Gender;
+        existingSurvey.Age = CalculateAge(annotator.DateOfBirth);
+    }
+    else
+    {
+        // Create new survey entry
         survey.Nationality = annotator.Nationality;
         survey.Gender = annotator.Gender;
         survey.Age = CalculateAge(annotator.DateOfBirth);
         survey.SubmittedAt = DateTime.UtcNow;
         survey.AnnotatorId = annotator.Id;
 
-        // 4. Save entity & unlock workspace
         _context.Set<AnnotatorSurvey>().Add(survey);
-        annotator.HasCompletedSurvey = true;
-
-        await _context.SaveChangesAsync();
     }
+
+    annotator.HasCompletedSurvey = true;
+    await _context.SaveChangesAsync();
+}
 
     private static void ValidateSurvey(AnnotatorSurvey survey)
     {
@@ -97,7 +119,6 @@ public class SurveyService : ISurveyService
             throw new ArgumentException("Driving frequency selection is required.");
         }
 
-        // Scenario validation rule
         bool selectedAnyScenario = survey.DrivingScenarioNighttime ||
                                    survey.DrivingScenarioSnowyWeather ||
                                    survey.DrivingScenarioHeavyRain ||

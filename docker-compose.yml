@@ -1,0 +1,33 @@
+services:
+  # 1. ASP.NET Core Backend + Swagger
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dotnet_backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=host.docker.internal\\SQLEXPRESS;Database=KitScenesAnnotationDb;User Id=sa;Password=YourPassword123!;Encrypt=False;TrustServerCertificate=True;
+    ports:
+      - "5000:5138"
+
+  # 2. Python Service / Scripts
+  python_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.python
+    container_name: python_scripts
+    restart: "no"
+    environment:
+      - ANNOTATION_DB_CONNECTION=DRIVER={ODBC Driver 18 for SQL Server};SERVER=host.docker.internal\\SQLEXPRESS;DATABASE=KitScenesAnnotationDb;UID=sa;PWD=YourPassword123!;TrustServerCertificate=yes;
+
+  # 3. React + Vite + Tailwind Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vite_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend

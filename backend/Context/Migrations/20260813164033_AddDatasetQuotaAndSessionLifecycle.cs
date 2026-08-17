@@ -63,53 +63,50 @@ namespace Context.Migrations
                 type: "datetimeoffset",
                 nullable: true);
 
-            // Some existing databases received AddStatusAndTimestamps before this
-            // restored migration. In that case Status already exists as an int.
-            // Convert it to the current string lifecycle representation; on a fresh
-            // database, create the string column directly.
-            migrationBuilder.Sql(
-                """
-                IF COL_LENGTH(N'[AnnotationSessions]', N'Status') IS NULL
-                BEGIN
-                    ALTER TABLE [AnnotationSessions]
-                    ADD [Status] nvarchar(50) NOT NULL
-                        CONSTRAINT [DF_AnnotationSessions_Status] DEFAULT N'Assigned';
-                END
-                ELSE IF EXISTS
-                (
-                    SELECT 1
-                    FROM sys.columns c
-                    INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
-                    WHERE c.object_id = OBJECT_ID(N'[AnnotationSessions]')
-                      AND c.name = N'Status'
-                      AND t.name <> N'nvarchar'
-                )
-                BEGIN
-                    DECLARE @statusDefault sysname;
-                    SELECT @statusDefault = dc.name
-                    FROM sys.default_constraints dc
-                    INNER JOIN sys.columns c
-                        ON c.object_id = dc.parent_object_id
-                       AND c.column_id = dc.parent_column_id
-                    WHERE dc.parent_object_id = OBJECT_ID(N'[AnnotationSessions]')
-                      AND c.name = N'Status';
+            migrationBuilder.Sql(@"
+IF COL_LENGTH(N'[AnnotationSessions]', N'Status') IS NULL
+BEGIN
+    ALTER TABLE [AnnotationSessions]
+    ADD [Status] nvarchar(50) NOT NULL
+        CONSTRAINT [DF_AnnotationSessions_Status] DEFAULT N'Assigned';
+END
+ELSE IF EXISTS
+(
+    SELECT 1
+    FROM sys.columns c
+    INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
+    WHERE c.object_id = OBJECT_ID(N'[AnnotationSessions]')
+      AND c.name = N'Status'
+      AND t.name <> N'nvarchar'
+)
+BEGIN
+    DECLARE @statusDefault sysname;
+    SELECT @statusDefault = dc.name
+    FROM sys.default_constraints dc
+    INNER JOIN sys.columns c
+        ON c.object_id = dc.parent_object_id
+       AND c.column_id = dc.parent_column_id
+    WHERE dc.parent_object_id = OBJECT_ID(N'[AnnotationSessions]')
+      AND c.name = N'Status';
 
-                    IF @statusDefault IS NOT NULL
-                        EXEC(N'ALTER TABLE [AnnotationSessions] DROP CONSTRAINT [' + @statusDefault + N']');
+    IF @statusDefault IS NOT NULL
+        EXEC(N'ALTER TABLE [AnnotationSessions] DROP CONSTRAINT [' + @statusDefault + N']');
 
-                    ALTER TABLE [AnnotationSessions] ALTER COLUMN [Status] nvarchar(50) NOT NULL;
-                    UPDATE [AnnotationSessions]
-                    SET [Status] = CASE [Status]
-                        WHEN N'1' THEN N'InProgress'
-                        WHEN N'2' THEN N'Completed'
-                        WHEN N'3' THEN N'Expired'
-                        WHEN N'4' THEN N'Cancelled'
-                        ELSE N'Assigned'
-                    END;
-                    ALTER TABLE [AnnotationSessions]
-                    ADD CONSTRAINT [DF_AnnotationSessions_Status] DEFAULT N'Assigned' FOR [Status];
-                END;
-                """);
+    ALTER TABLE [AnnotationSessions] ALTER COLUMN [Status] nvarchar(50) NOT NULL;
+
+    EXEC(N'UPDATE [AnnotationSessions]
+    SET [Status] = CASE [Status]
+        WHEN N''1'' THEN N''InProgress''
+        WHEN N''2'' THEN N''Completed''
+        WHEN N''3'' THEN N''Expired''
+        WHEN N''4'' THEN N''Cancelled''
+        ELSE N''Assigned''
+    END');
+
+    ALTER TABLE [AnnotationSessions]
+    ADD CONSTRAINT [DF_AnnotationSessions_Status] DEFAULT N'Assigned' FOR [Status];
+END;
+");
 
             migrationBuilder.CreateTable(
                 name: "Datasets",
