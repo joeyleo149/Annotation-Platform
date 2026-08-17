@@ -46,6 +46,7 @@ button {
   padding: 24px 16px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .brand {
@@ -89,6 +90,9 @@ button {
 .admin-sidebar nav {
   display: grid;
   gap: 7px;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .admin-sidebar nav button {

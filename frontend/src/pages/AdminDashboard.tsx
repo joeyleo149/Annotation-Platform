@@ -154,7 +154,7 @@ export default function AdminDashboard() {
     [datasets, selectedDatasetId],
   );
 
-  const hidesDatasetControls = view === 'addAdmin' || view === 'addQuestion' || view === 'questions';
+  const hidesDatasetControls = view === 'addAdmin';
 
   const filteredVideos = useMemo(() => {
     const normalizedSearch =
@@ -1241,9 +1241,9 @@ export default function AdminDashboard() {
       case 'addAdmin':
         return <AddAdminPage />;
       case 'addQuestion':
-        return <AddQuestionPage />;
+        return <AddQuestionPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} />;
       case 'questions':
-        return <QuestionsPage />;
+        return <QuestionsPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} />;
       default:
         return renderOverview();
     }

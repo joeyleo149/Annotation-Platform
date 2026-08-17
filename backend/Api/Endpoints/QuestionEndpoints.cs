@@ -16,12 +16,19 @@ public static class QuestionEndpoints
         return group;
     }
 
-    private static async Task<IResult> GetQuestionsAsync(bool includeInactive, ClaimsPrincipal user, AppDbContext context, CancellationToken ct)
+    private static async Task<IResult> GetQuestionsAsync(int? datasetId, bool includeInactive, ClaimsPrincipal user, AppDbContext context, CancellationToken ct)
     {
-        var query = context.Questions.AsNoTracking();
+        var query = context.Questions.AsNoTracking().AsQueryable();
+
+        if (datasetId.HasValue && datasetId.Value > 0)
+        {
+            query = query.Where(question => question.DatasetId == datasetId.Value);
+        }
+
         if (!user.IsInRole("Admin") || !includeInactive) query = query.Where(question => question.IsActive);
+
         var questions = await query.OrderBy(question => question.SegmentNo).ThenBy(question => question.Id)
-            .Select(question => new QuestionResponse(question.Id, question.QuestionText, question.SegmentNo, question.IsActive))
+            .Select(question => new QuestionResponse(question.Id, question.DatasetId, question.QuestionText, question.SegmentNo, question.IsActive))
             .ToListAsync(ct);
         return Results.Ok(questions);
     }
@@ -31,10 +38,21 @@ public static class QuestionEndpoints
         var text = request.QuestionText?.Trim();
         if (string.IsNullOrWhiteSpace(text)) return Results.BadRequest(new { message = "Question text is required." });
         if (request.SegmentNo is < 1 or > 3) return Results.BadRequest(new { message = "Segment number must be 1, 2, or 3." });
-        var question = new Question { QuestionText = text, SegmentNo = request.SegmentNo, IsActive = true };
+        if (request.DatasetId <= 0)
+        {
+            return Results.BadRequest(new { message = "A valid dataset is required for the question." });
+        }
+
+        var datasetExists = await context.Datasets.AnyAsync(item => item.Id == request.DatasetId, ct);
+        if (!datasetExists)
+        {
+            return Results.BadRequest(new { message = $"Dataset {request.DatasetId} does not exist." });
+        }
+
+        var question = new Question { DatasetId = request.DatasetId, QuestionText = text, SegmentNo = request.SegmentNo, IsActive = true };
         context.Questions.Add(question);
         await context.SaveChangesAsync(ct);
-        return Results.Created($"/api/questions/{question.Id}", new QuestionResponse(question.Id, question.QuestionText, question.SegmentNo, question.IsActive));
+        return Results.Created($"/api/questions/{question.Id}", new QuestionResponse(question.Id, question.DatasetId, question.QuestionText, question.SegmentNo, question.IsActive));
     }
 
     private static async Task<IResult> SetActiveAsync(int id, ActiveRequest request, AppDbContext context, CancellationToken ct)
@@ -43,10 +61,10 @@ public static class QuestionEndpoints
         if (question is null) return Results.NotFound(new { message = "Question was not found." });
         question.IsActive = request.IsActive;
         await context.SaveChangesAsync(ct);
-        return Results.Ok(new QuestionResponse(question.Id, question.QuestionText, question.SegmentNo, question.IsActive));
+        return Results.Ok(new QuestionResponse(question.Id, question.DatasetId, question.QuestionText, question.SegmentNo, question.IsActive));
     }
 
-    public sealed record QuestionRequest(string QuestionText, int SegmentNo);
+    public sealed record QuestionRequest(string QuestionText, int SegmentNo, int DatasetId);
     public sealed record ActiveRequest(bool IsActive);
-    public sealed record QuestionResponse(int Id, string QuestionText, int SegmentNo, bool IsActive);
+    public sealed record QuestionResponse(int Id, int? DatasetId, string QuestionText, int SegmentNo, bool IsActive);
 }

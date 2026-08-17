@@ -189,7 +189,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.Property(x => x.QuestionText).HasMaxLength(1000);
             entity.Property(x => x.IsActive).HasDefaultValue(true);
-            entity.HasIndex(x => new { x.SegmentNo, x.IsActive });
+            entity.HasIndex(x => new { x.DatasetId, x.SegmentNo, x.IsActive });
+            entity.HasOne(x => x.Dataset)
+                .WithMany(x => x.Questions)
+                .HasForeignKey(x => x.DatasetId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.ToTable(table => table.HasCheckConstraint("CK_Questions_SegmentNo", "[SegmentNo] IN (1, 2, 3)"));
         });
         modelBuilder.Entity<AnnotatorSurvey>(entity =>
