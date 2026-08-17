@@ -170,7 +170,6 @@ export default function AnnotationControls({
       return next;
     });
   }, [segments]);
-
   useEffect(() => {
     if (tab !== "questions") return;
     let cancelled = false;
