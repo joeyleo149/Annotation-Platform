@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { FileText, HelpCircle, Trash2, Send, Mic, MicOff, Play, Check, ChevronRight } from "lucide-react";
+import { FileText, HelpCircle, Trash2, Send, Mic, MicOff, Play, Check } from "lucide-react";
 import {
   getAnswersForSegment,
   getQuestions,
@@ -23,12 +23,10 @@ interface AnnotationControlsProps {
   currentTime: number;
   videoDuration?: number;
   segments: Segment[];
-  isLastVideo?: boolean; // controls whether the nav button reads "Next Video" or "Done"
   onSeek: (seconds: number) => void;
   onSaveDraft: (text: string) => void;
-  onCompleteAnnotation: (id: string, updated: Partial<Segment>) => void; // single commit to backend
+  onCompleteAnnotation: (id: string, updated: Partial<Segment>) => Promise<void> | void; // single commit to backend
   onDeleteSegment: (id: string) => void;
-  onNextVideo?: () => void; // not wired yet — flow for multi-video sessions is incomplete
   onFinalizeSession?: () => Promise<void> | void;
 }
 
@@ -59,58 +57,6 @@ function getSupportedRecordingMimeType(): string | undefined {
   ];
 
   return candidates.find((mimeType) => MediaRecorder.isTypeSupported(mimeType));
-}
-
-async function convertAudioBlobToWav(audioBlob: Blob): Promise<Blob> {
-  const arrayBuffer = await audioBlob.arrayBuffer();
-  const audioContext = new AudioContext();
-
-  try {
-    const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
-    const channelCount = decoded.numberOfChannels;
-    const sampleRate = decoded.sampleRate;
-    const sampleCount = decoded.length;
-    const bytesPerSample = 2;
-    const blockAlign = channelCount * bytesPerSample;
-    const dataSize = sampleCount * blockAlign;
-    const buffer = new ArrayBuffer(44 + dataSize);
-    const view = new DataView(buffer);
-
-    const writeString = (offset: number, value: string) => {
-      for (let i = 0; i < value.length; i += 1) {
-        view.setUint8(offset + i, value.charCodeAt(i));
-      }
-    };
-
-    writeString(0, "RIFF");
-    view.setUint32(4, 36 + dataSize, true);
-    writeString(8, "WAVE");
-    writeString(12, "fmt ");
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, channelCount, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * blockAlign, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, 16, true);
-    writeString(36, "data");
-    view.setUint32(40, dataSize, true);
-
-    let offset = 44;
-    for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
-      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-        const channel = decoded.getChannelData(channelIndex);
-        const value = Math.max(-1, Math.min(1, channel[sampleIndex]));
-        const intValue = value < 0 ? value * 0x8000 : value * 0x7fff;
-        view.setInt16(offset, intValue, true);
-        offset += 2;
-      }
-    }
-
-    return new Blob([buffer], { type: "audio/wav" });
-  } finally {
-    await audioContext.close();
-  }
 }
 
 function AutoResizingTextarea({
@@ -165,19 +111,15 @@ export default function AnnotationControls({
   datasetId,
   currentTime,
   segments,
-  isLastVideo = false,
   onSeek,
   onSaveDraft,
   onCompleteAnnotation,
   onDeleteSegment,
-  onNextVideo,
   onFinalizeSession,
 }: AnnotationControlsProps) {
   const [tab, setTab] = useState<"transcription" | "questions">("transcription");
   const [draftText, setDraftText] = useState("");
   const [localEdits, setLocalEdits] = useState<Record<string, LocalDraft>>({});
-  const [justCompleted, setJustCompleted] = useState<string | null>(null);
-  const [isMarkedCompleted, setIsMarkedCompleted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
@@ -195,6 +137,9 @@ export default function AnnotationControls({
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [answerSaving, setAnswerSaving] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
 
   // Tracks the last-seen parent values per segment id, separately from the
   // user's local draft. This is what makes it possible to tell "the parent
@@ -239,10 +184,9 @@ export default function AnnotationControls({
     });
   }, [segments]);
 
-  // Load active questions whenever the Questions tab is opened, or the
-  // dataset/session context changes.
+  // Load active questions as soon as the annotation opens so completion
+  // validation works even if the annotator has not visited the Questions tab.
   useEffect(() => {
-    if (tab !== "questions") return;
     let cancelled = false;
 
     const loadQuestions = async () => {
@@ -273,7 +217,7 @@ export default function AnnotationControls({
     return () => {
       cancelled = true;
     };
-  }, [tab, datasetId, sessionId, segments.length, segments[0]?.id]);
+  }, [datasetId, sessionId, segments.length, segments[0]?.id]);
 
   const unansweredQuestions = questions.filter((question) => answers[question.id] === undefined);
   const answeredQuestions = answeredOrder
@@ -297,6 +241,7 @@ export default function AnnotationControls({
       setAnsweredOrder((prev) => [...prev.filter((id) => id !== currentQuestion.id), currentQuestion.id]);
       setAnswerDraft("");
       setQuestionsError(null);
+      setCompletionError(null);
     } catch (error) {
       setQuestionsError(error instanceof Error ? error.message : "Unable to save answer.");
     } finally {
@@ -324,13 +269,14 @@ export default function AnnotationControls({
       await updateAnswer(Number(targetSegment.id), questionId, editDraft.trim());
       setAnswers((prev) => ({ ...prev, [questionId]: editDraft.trim() }));
       setEditingQuestionId(null);
+      setQuestionsError(null);
     } catch (error) {
       setQuestionsError(error instanceof Error ? error.message : "Unable to update answer.");
     }
   };
 
   const handleSubmitDraft = () => {
-    if (isMarkedCompleted || !draftText.trim()) return;
+    if (!draftText.trim()) return;
     onSaveDraft(draftText.trim());
     setDraftText("");
   };
@@ -407,72 +353,87 @@ export default function AnnotationControls({
   };
 
   const updateLocal = (id: string, fields: Partial<LocalDraft>) => {
-    if (isMarkedCompleted) return;
     setLocalEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...fields } }));
-    setJustCompleted(null);
   };
 
-  const handleComplete = (id: string) => {
+  const handleComplete = async (id: string) => {
     const draft = localEdits[id];
     if (!draft) return;
-    onCompleteAnnotation(id, draft);
-    setJustCompleted(id);
+    await onCompleteAnnotation(id, draft);
   };
 
   const completionText = segments[0] ? (localEdits[segments[0].id]?.text ?? segments[0].text ?? "") : "";
+  const hasTranscription = completionText.trim().length > 0;
+  const canOpenQuestions = hasTranscription;
+  const canComplete =
+    hasTranscription &&
+    !questionsLoading &&
+    !questionsError &&
+    !answerSaving &&
+    unansweredQuestions.length === 0;
 
-  const toggleCompleteState = async () => {
-    if (isMarkedCompleted) {
-      setIsMarkedCompleted(false);
-      setJustCompleted(null);
+  useEffect(() => {
+    if (!canOpenQuestions && tab === "questions") {
+      setTab("transcription");
+    }
+  }, [canOpenQuestions, tab]);
+
+  const completeAnnotation = async () => {
+    const firstSegment = segments[0];
+    if (!firstSegment || !completionText.trim()) {
+      setCompletionError("Add a transcription before completing this annotation.");
+      setTab("transcription");
       return;
     }
 
-    const firstSegment = segments[0];
-    if (!firstSegment || !completionText.trim()) return;
-
-    handleComplete(firstSegment.id);
-    setIsMarkedCompleted(true);
-
-    if (onFinalizeSession) {
-      await onFinalizeSession();
+    if (unansweredQuestions.length > 0) {
+      setCompletionError(`Answer all questions before completing this annotation. ${unansweredQuestions.length} remaining.`);
+      setTab("questions");
+      return;
     }
-  };
 
-  const isDirtyFor = (seg: Segment) => {
-    const draft = localEdits[seg.id];
-    if (!draft) return false;
-    return draft.text !== seg.text || draft.startTime !== seg.startTime || draft.endTime !== seg.endTime;
+    if (!canComplete || isCompleting || isCompleted) return;
+
+    setCompletionError(null);
+    setIsCompleting(true);
+    try {
+      await handleComplete(firstSegment.id);
+      if (onFinalizeSession) {
+        await onFinalizeSession();
+      }
+      setIsCompleted(true);
+    } catch (error) {
+      setCompletionError(error instanceof Error ? error.message : "Unable to complete this annotation.");
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Top bar — Mark as Completed (left), session nav (right, placeholder) */}
+      {/* Single completion action for the annotation session. */}
       <div className="flex items-center justify-end gap-2 mb-3">
         <button
-          onClick={toggleCompleteState}
-          disabled={!isMarkedCompleted && !completionText.trim()}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            isMarkedCompleted
-              ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
-              : "bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-white"
-          }`}
+          onClick={completeAnnotation}
+          disabled={!canComplete || isCompleting || isCompleted}
+          title={!hasTranscription
+            ? "Add and save a transcription first."
+            : questionsLoading
+            ? "Loading questions…"
+            : unansweredQuestions.length > 0
+            ? `Answer all questions first (${unansweredQuestions.length} remaining).`
+            : "Complete this annotation"}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
         >
           <Check size={14} />
-          {isMarkedCompleted || (segments[0] && justCompleted === segments[0].id && !isDirtyFor(segments[0]))
-            ? "Saved"
-            : "Mark as Completed"}
-        </button>
-        <button
-          onClick={onNextVideo}
-          disabled
-          title="Multi-video session flow not wired yet"
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-400 cursor-not-allowed"
-        >
-          {isLastVideo ? "Done" : "Next Video"}
-          <ChevronRight size={14} />
+          {isCompleted ? "Saved" : isCompleting ? "Completing…" : "Mark as Completed"}
         </button>
       </div>
+      {completionError && (
+        <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          {completionError}
+        </p>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200">
@@ -487,11 +448,17 @@ export default function AnnotationControls({
           <FileText size={15} /> Transcription
         </button>
         <button
-          onClick={() => setTab("questions")}
+          onClick={() => {
+            if (canOpenQuestions) setTab("questions");
+          }}
+          disabled={!canOpenQuestions}
+          title={canOpenQuestions ? "Answer annotation questions" : "Save a transcription to unlock Questions"}
           className={`flex items-center gap-1.5 px-1 pb-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
             tab === "questions"
               ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-500 hover:text-slate-700"
+              : canOpenQuestions
+              ? "border-transparent text-slate-500 hover:text-slate-700"
+              : "border-transparent text-slate-300 cursor-not-allowed"
           }`}
         >
           <HelpCircle size={15} /> Questions
@@ -550,7 +517,6 @@ export default function AnnotationControls({
 
                   <AutoResizingTextarea
                     value={draft.text}
-                    disabled={isMarkedCompleted}
                     onChange={(text) => updateLocal(seg.id, { text })}
                     className="text-sm text-slate-700 bg-slate-50/60 hover:bg-slate-50 focus:bg-white border border-transparent hover:border-slate-200 focus:border-blue-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed transition-all disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                   />
@@ -682,18 +648,17 @@ export default function AnnotationControls({
         )}
       </div>
 
-      {/* New annotation composer */}
-      <div className="border-t border-slate-200 pt-3 mt-3">
-        <div className="relative">
+      {/* The transcription composer belongs only to the Transcription tab. */}
+      {tab === "transcription" && (
+        <div className="border-t border-slate-200 pt-3 mt-3">
+          <div className="relative">
           <textarea
             value={draftText}
-            disabled={isMarkedCompleted}
             onChange={(e) => {
-              if (isMarkedCompleted) return;
               setDraftText(e.target.value);
             }}
             onKeyDown={handleKeyDown}
-            placeholder={isMarkedCompleted ? "Completed — click the button to resume editing." : "Type new transcription segment here..."}
+            placeholder="Type new transcription segment here..."
             rows={2}
             className="w-full resize-none rounded-lg border border-slate-200 bg-white p-3 pr-16 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
           />
@@ -721,16 +686,17 @@ export default function AnnotationControls({
               <Send size={14} />
             </button>
           </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-1 font-mono">
+            {isRecording
+              ? "Recording... click the mic to stop and transcribe."
+              : isTranscribing
+              ? "Transcribing..."
+              : "Current time: " + currentTime.toFixed(2) + "s — Press Enter to submit segment."}
+          </p>
+          {micError && <p className="text-xs text-red-600 mt-1">{micError}</p>}
         </div>
-        <p className="text-xs text-slate-400 mt-1 font-mono">
-          {isRecording
-            ? "Recording... click the mic to stop and transcribe."
-            : isTranscribing
-            ? "Transcribing..."
-            : "Current time: " + currentTime.toFixed(2) + "s — Press Enter to submit segment."}
-        </p>
-        {micError && <p className="text-xs text-red-600 mt-1">{micError}</p>}
-      </div>
+      )}
     </div>
   );
 }

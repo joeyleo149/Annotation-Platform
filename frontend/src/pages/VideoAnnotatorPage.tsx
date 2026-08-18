@@ -61,8 +61,6 @@ type VideoDetails = {
   originalReasoningJson?: string | null;
 };
 
-// TODO: real value once sessions can hold multiple videos — hardcoded true for now
-// since "Next Video" is a non-functional placeholder until that flow exists.
 function parseTrajectoryJson(raw: string | null | undefined): TrajectoryPayload | null {
   if (!raw) return null;
 
@@ -510,7 +508,7 @@ export default function VideoAnnotatorPage() {
 
   const handleCompleteSession = async () => {
     if (MOCK_MODE) {
-      navigate("/annotator/annotations");
+      window.setTimeout(() => navigate("/annotator/annotations"), 500);
       return;
     }
 
@@ -528,7 +526,9 @@ export default function VideoAnnotatorPage() {
         throw new Error(payload.message || payload.error || "Unable to complete this annotation.");
       }
 
-      navigate("/annotator/annotations");
+      // Give the completion control enough time to show its final Saved state
+      // before returning to the annotator's main page.
+      window.setTimeout(() => navigate("/annotator/annotations"), 500);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to complete this annotation.";
       setLoadError(message);
