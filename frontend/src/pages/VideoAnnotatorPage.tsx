@@ -63,8 +63,6 @@ type VideoDetails = {
 
 // TODO: real value once sessions can hold multiple videos — hardcoded true for now
 // since "Next Video" is a non-functional placeholder until that flow exists.
-const IS_LAST_VIDEO = true;
-
 function parseTrajectoryJson(raw: string | null | undefined): TrajectoryPayload | null {
   if (!raw) return null;
 
@@ -491,6 +489,7 @@ export default function VideoAnnotatorPage() {
       });
     } catch (e: any) {
       setLoadError(e.message);
+      throw e;
     }
   };
 
@@ -509,21 +508,9 @@ export default function VideoAnnotatorPage() {
     setSegments((prev) => prev.filter((s) => s.id !== id));
   };
 
-  // Placeholder — multi-video session flow isn't built yet. Button is
-  // disabled in AnnotationControls; this exists only so the prop is wired.
-  const handleNextVideo = () => {
-    console.log("Next video — not implemented yet.");
-  };
-
   const handleCompleteSession = async () => {
     if (MOCK_MODE) {
       navigate("/annotator/annotations");
-      return;
-    }
-
-    const transcript = segments[0]?.text?.trim();
-    if (!transcript) {
-      setLoadError("Add a transcription before finishing this video.");
       return;
     }
 
@@ -543,7 +530,9 @@ export default function VideoAnnotatorPage() {
 
       navigate("/annotator/annotations");
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Unable to complete this annotation.");
+      const message = error instanceof Error ? error.message : "Unable to complete this annotation.";
+      setLoadError(message);
+      throw new Error(message);
     }
   };
 
@@ -562,12 +551,10 @@ export default function VideoAnnotatorPage() {
           currentTime={currentTime}
           videoDuration={singleAnnotationDuration}
           segments={segments}
-          isLastVideo={IS_LAST_VIDEO}
           onSeek={(t) => playerRef.current?.seekTo(t)}
           onSaveDraft={handleSaveDraft}
           onCompleteAnnotation={handleCompleteAnnotation}
           onDeleteSegment={handleDeleteSegment}
-          onNextVideo={handleNextVideo}
           onFinalizeSession={handleCompleteSession}
         />
       </div>

@@ -22,8 +22,8 @@ public sealed class AnnotationExportService(
         var video = await BuildVideoQuery().SingleOrDefaultAsync(item => item.Id == videoId, cancellationToken);
         if (video is null) return null;
 
-        var activeQuestions = await GetActiveQuestionsAsync(video.DatasetId, cancellationToken);
-        var document = CreateDocument("Video", video.Dataset, [video], includeIncomplete, activeQuestions);
+        var questions = await GetQuestionsAsync(video.DatasetId, cancellationToken);
+        var document = CreateDocument("Video", video.Dataset, [video], includeIncomplete, questions);
         return CreateExportFile(document, format, $"video-{video.Id}-annotations");
     }
 
@@ -36,47 +36,83 @@ public sealed class AnnotationExportService(
         var videos = await BuildVideoQuery().Where(video => video.DatasetId == datasetId)
             .OrderBy(video => video.DatasetRowIndex).ThenBy(video => video.Id).ToListAsync(cancellationToken);
 
-        var activeQuestions = await GetActiveQuestionsAsync(datasetId, cancellationToken);
-        var document = CreateDocument("Dataset", dataset, videos, includeIncomplete, activeQuestions);
+        var questions = await GetQuestionsAsync(datasetId, cancellationToken);
+        var document = CreateDocument("Dataset", dataset, videos, includeIncomplete, questions);
 
         var safeDatasetName = CreateSafeFileName(dataset.Name);
         return CreateExportFile(document, format, $"dataset-{dataset.Id}-{safeDatasetName}-annotations");
     }
 
-    private async Task<IReadOnlyList<Question>> GetActiveQuestionsAsync(int? datasetId, CancellationToken ct)
+    private async Task<IReadOnlyList<Question>> GetQuestionsAsync(int? datasetId, CancellationToken ct)
     {
         if (!datasetId.HasValue) return [];
         return await context.Questions.AsNoTracking()
-            .Where(question => question.IsActive && question.DatasetId == datasetId.Value)
+            .Where(question => question.DatasetId == datasetId.Value)
+            .OrderBy(question => question.SegmentNo)
+            .ThenBy(question => question.Id)
             .ToListAsync(ct);
     }
 
-    private static AnnotationExportDocument CreateDocument(string scope, Dataset? dataset, IReadOnlyCollection<Video> videos, bool includeIncomplete, IReadOnlyList<Question> activeQuestions)
+    private static AnnotationExportDocument CreateDocument(string scope, Dataset? dataset, IReadOnlyCollection<Video> videos, bool includeIncomplete, IReadOnlyList<Question> questions)
     {
-        var exportedVideos = videos.Select(video => CreateVideoExport(video, includeIncomplete, activeQuestions)).ToList();
+        var exportedVideos = videos.Select(video => CreateVideoExport(video, includeIncomplete, questions)).ToList();
 
         return new AnnotationExportDocument(
             DateTimeOffset.UtcNow, scope, dataset?.Id, dataset?.Name,
             exportedVideos.Count, exportedVideos.Sum(video => video.Sessions.Count), exportedVideos);
     }
 
-    private static VideoAnnotationExport CreateVideoExport(Video video, bool includeIncomplete, IReadOnlyList<Question> activeQuestions)
+    private static VideoAnnotationExport CreateVideoExport(Video video, bool includeIncomplete, IReadOnlyList<Question> questions)
     {
         var sessions = video.AnnotationSessions
             .Where(session => includeIncomplete || session.Status == AnnotationSessionStatus.Completed)
             .OrderBy(session => session.Id)
             .Select(session =>
             {
+                var answerByQuestionId = session.SegmentResponses
+                    .SelectMany(segment => segment.QuestionAnswers.Select(answer => new
+                    {
+                        answer.QuestionId,
+                        answer.Answer,
+                        SegmentResponseId = segment.Id,
+                        segment.SubmittedAt
+                    }))
+                    .GroupBy(item => item.QuestionId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => group.OrderByDescending(item => item.SubmittedAt).First());
+
+                var sessionQuestions = questions
+                    .Select(question =>
+                    {
+                        var isAnswered = answerByQuestionId.TryGetValue(question.Id, out var savedAnswer);
+                        return new SessionQuestionExport(
+                            question.Id,
+                            question.QuestionText,
+                            question.SegmentNo,
+                            question.IsActive,
+                            isAnswered,
+                            isAnswered ? savedAnswer!.Answer : null,
+                            isAnswered ? savedAnswer!.SegmentResponseId : null);
+                    })
+                    .ToList();
+
                 var segments = session.SegmentResponses
                     .OrderBy(segment => segment.SegmentNumber)
                     .Select(segment =>
                     {
-                        var answeredByQuestionId = segment.QuestionAnswers.ToDictionary(a => a.QuestionId, a => a.Answer);
-                        var questionAnswers = activeQuestions
-                            .Where(question => question.SegmentNo == segment.SegmentNumber)
-                            .Select(question => new QuestionAnswerExport(
-                                question.Id,
-                                answeredByQuestionId.TryGetValue(question.Id, out var answer) ? answer : "-"))
+                        var questionById = questions.ToDictionary(question => question.Id);
+                        var questionAnswers = segment.QuestionAnswers
+                            .Select(answer =>
+                            {
+                                questionById.TryGetValue(answer.QuestionId, out var question);
+                                return new QuestionAnswerExport(
+                                    answer.QuestionId,
+                                    question?.QuestionText ?? "Question no longer exists",
+                                    question?.SegmentNo,
+                                    question?.IsActive ?? false,
+                                    answer.Answer);
+                            })
                             .OrderBy(qa => qa.QuestionId)
                             .ToList();
 
@@ -87,7 +123,8 @@ public sealed class AnnotationExportService(
 
                 return new AnnotationSessionExport(
                     session.Id, session.AnnotatorId, session.Annotator.Name, session.Status,
-                    session.AssignedAt, session.ExpiresAt, session.StartedAt, session.CompletedAt, segments);
+                    session.AssignedAt, session.ExpiresAt, session.StartedAt, session.CompletedAt,
+                    sessionQuestions, segments);
             })
             .ToList();
 
@@ -166,10 +203,16 @@ public sealed class AnnotationExportService(
                 "AssignedAt",
                 "ExpiresAt",
                 "CompletedAt",
+                "StartedAt",
                 "SegmentNumber",
                 "Transcript",
                 "SegmentSubmittedAt",
                 "QuestionId",
+                "QuestionText",
+                "QuestionSegmentNumber",
+                "QuestionIsActive",
+                "QuestionIsAnswered",
+                "AnswerSegmentResponseId",
                 "Answer"
             ]);
 
@@ -191,6 +234,27 @@ public sealed class AnnotationExportService(
 
             foreach (var session in video.Sessions)
             {
+                if (session.Questions.Count > 0)
+                {
+                    foreach (var question in session.Questions)
+                    {
+                        var answerSegment = question.AnswerSegmentResponseId.HasValue
+                            ? session.Segments.FirstOrDefault(segment => segment.SegmentResponseId == question.AnswerSegmentResponseId.Value)
+                            : session.Segments.FirstOrDefault(segment => segment.SegmentNumber == question.SegmentNumber);
+
+                        AppendCsvRow(
+                            builder,
+                            CreateCsvValues(
+                                document,
+                                video,
+                                session,
+                                answerSegment,
+                                question));
+                    }
+
+                    continue;
+                }
+
                 if (session.Segments.Count == 0)
                 {
                     AppendCsvRow(
@@ -207,32 +271,7 @@ public sealed class AnnotationExportService(
 
                 foreach (var segment in session.Segments)
                 {
-                    if (segment.QuestionAnswers.Count == 0)
-                    {
-                        AppendCsvRow(
-                            builder,
-                            CreateCsvValues(
-                                document,
-                                video,
-                                session,
-                                segment,
-                                null));
-
-                        continue;
-                    }
-
-                    foreach (var answer
-                             in segment.QuestionAnswers)
-                    {
-                        AppendCsvRow(
-                            builder,
-                            CreateCsvValues(
-                                document,
-                                video,
-                                session,
-                                segment,
-                                answer));
-                    }
+                    AppendCsvRow(builder, CreateCsvValues(document, video, session, segment, null));
                 }
             }
         }
@@ -245,7 +284,7 @@ public sealed class AnnotationExportService(
         VideoAnnotationExport video,
         AnnotationSessionExport? session,
         SegmentAnnotationExport? segment,
-        QuestionAnswerExport? answer)
+        SessionQuestionExport? question)
     {
         return
         [
@@ -267,13 +306,19 @@ public sealed class AnnotationExportService(
             session?.AssignedAt.ToString("O"),
             session?.ExpiresAt.ToString("O"),
             session?.CompletedAt?.ToString("O"),
+            session?.StartedAt?.ToString("O"),
             segment?.SegmentNumber.ToString(
                 CultureInfo.InvariantCulture),
             segment?.Transcript,
             segment?.SubmittedAt.ToString("O"),
-            answer?.QuestionId.ToString(
+            question?.QuestionId.ToString(
                 CultureInfo.InvariantCulture),
-            answer?.Answer
+            question?.QuestionText,
+            question?.SegmentNumber.ToString(CultureInfo.InvariantCulture),
+            question?.IsActive.ToString(CultureInfo.InvariantCulture),
+            question?.IsAnswered.ToString(CultureInfo.InvariantCulture),
+            question?.AnswerSegmentResponseId?.ToString(CultureInfo.InvariantCulture),
+            question?.Answer
         ];
     }
 
@@ -376,7 +421,17 @@ public sealed record AnnotationSessionExport(
     DateTimeOffset ExpiresAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
+    IReadOnlyList<SessionQuestionExport> Questions,
     IReadOnlyList<SegmentAnnotationExport> Segments);
+
+public sealed record SessionQuestionExport(
+    int QuestionId,
+    string QuestionText,
+    int SegmentNumber,
+    bool IsActive,
+    bool IsAnswered,
+    string? Answer,
+    int? AnswerSegmentResponseId);
 
 public sealed record SegmentAnnotationExport(
     int SegmentResponseId,
@@ -388,4 +443,7 @@ public sealed record SegmentAnnotationExport(
 
 public sealed record QuestionAnswerExport(
     int QuestionId,
+    string QuestionText,
+    int? SegmentNumber,
+    bool IsActive,
     string Answer);

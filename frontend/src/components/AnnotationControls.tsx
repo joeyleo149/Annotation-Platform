@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { FileText, HelpCircle, Trash2, Send, Mic, MicOff, Play, Check, ChevronRight } from "lucide-react";
-import { getQuestions, submitAnswer, updateAnswer, type QuestionDto } from "../services/Questionanswerservice";
+import {
+  getAnswersForSegment,
+  getQuestions,
+  submitAnswer,
+  updateAnswer,
+  type QuestionDto,
+} from "../services/Questionanswerservice";
 
 export interface Segment {
   id: string;
@@ -8,12 +14,14 @@ export interface Segment {
   endTime: number;
   text: string;
   labels: string[];
+  segmentNumber?: number;
 }
 
 interface AnnotationControlsProps {
   sessionId?: string;
   datasetId?: number | null;
   currentTime: number;
+  videoDuration?: number;
   segments: Segment[];
   isLastVideo?: boolean; // controls whether the nav button reads "Next Video" or "Done"
   onSeek: (seconds: number) => void;
@@ -176,17 +184,16 @@ export default function AnnotationControls({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Question & answer state — a question is picked from the dropdown, its
-  // answer is composed inline, then "sent" (saved to the backend). Saved
-  // answers render as their own card below the picker and can be edited
-  // in-place without going back through the dropdown.
+  // Questions are ordered by segment, then by creation id. Unanswered items
+  // stay at the front; submitting one appends it to the answered end.
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [selectedQuestionId, setSelectedQuestionId] = useState<number | "">("");
+  const [answeredOrder, setAnsweredOrder] = useState<number[]>([]);
   const [answerDraft, setAnswerDraft] = useState("");
   const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [answerSaving, setAnswerSaving] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
 
   // Tracks the last-seen parent values per segment id, separately from the
@@ -243,7 +250,18 @@ export default function AnnotationControls({
       setQuestionsError(null);
       try {
         const active = await getQuestions(false, datasetId, sessionId ? Number(sessionId) : null);
-        if (!cancelled) setQuestions(active);
+        const ordered = [...active].sort((a, b) => a.segmentNo - b.segmentNo || a.id - b.id);
+        const targetSegment = segments[0];
+        const savedAnswers = targetSegment
+          ? await getAnswersForSegment(Number(targetSegment.id))
+          : [];
+
+        if (!cancelled) {
+          const saved = Object.fromEntries(savedAnswers.map((item) => [item.questionId, item.answer]));
+          setQuestions(ordered);
+          setAnswers(saved);
+          setAnsweredOrder(ordered.filter((question) => saved[question.id] !== undefined).map((question) => question.id));
+        }
       } catch (error) {
         if (!cancelled) setQuestionsError(error instanceof Error ? error.message : "Unable to load questions.");
       } finally {
@@ -255,24 +273,41 @@ export default function AnnotationControls({
     return () => {
       cancelled = true;
     };
-  }, [tab, datasetId, sessionId]);
+  }, [tab, datasetId, sessionId, segments.length, segments[0]?.id]);
+
+  const unansweredQuestions = questions.filter((question) => answers[question.id] === undefined);
+  const answeredQuestions = answeredOrder
+    .map((id) => questions.find((question) => question.id === id))
+    .filter((question): question is QuestionDto => question !== undefined && answers[question.id] !== undefined);
+  const currentQuestion = unansweredQuestions[0] ?? null;
+  const queue = [...unansweredQuestions, ...answeredQuestions];
 
   const handleSendAnswer = async () => {
     const targetSegment = segments[0];
-    if (!targetSegment || selectedQuestionId === "" || !answerDraft.trim()) return;
+    if (!targetSegment || !currentQuestion || !answerDraft.trim() || answerSaving) return;
 
+    setAnswerSaving(true);
     try {
       await submitAnswer({
         segmentResponseId: Number(targetSegment.id),
-        questionId: Number(selectedQuestionId),
+        questionId: currentQuestion.id,
         answer: answerDraft.trim(),
       });
-      setAnswers((prev) => ({ ...prev, [Number(selectedQuestionId)]: answerDraft.trim() }));
+      setAnswers((prev) => ({ ...prev, [currentQuestion.id]: answerDraft.trim() }));
+      setAnsweredOrder((prev) => [...prev.filter((id) => id !== currentQuestion.id), currentQuestion.id]);
       setAnswerDraft("");
-      setSelectedQuestionId("");
       setQuestionsError(null);
     } catch (error) {
       setQuestionsError(error instanceof Error ? error.message : "Unable to save answer.");
+    } finally {
+      setAnswerSaving(false);
+    }
+  };
+
+  const handleAnswerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSendAnswer();
     }
   };
 
@@ -537,48 +572,78 @@ export default function AnnotationControls({
           <div className="space-y-4">
             {questionsError && <p className="text-sm text-red-600">{questionsError}</p>}
 
-            <div className="flex gap-2">
-              <select
-                value={selectedQuestionId}
-                onChange={(e) => setSelectedQuestionId(e.target.value === "" ? "" : Number(e.target.value))}
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">
-                  {questionsLoading ? "Loading questions..." : "Select a question..."}
-                </option>
-                {questions.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.questionText}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {selectedQuestionId !== "" && (
-              <div className="flex gap-2">
-                <input
-                  type="text"
+            {questionsLoading ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                Loading questions…
+              </div>
+            ) : currentQuestion ? (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 shadow-sm">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                      Segment {currentQuestion.segmentNo} · Next question
+                    </span>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-slate-900">{currentQuestion.questionText}</p>
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-slate-500">
+                    {answeredQuestions.length + 1}/{questions.length}
+                  </span>
+                </div>
+                <div className="flex items-end gap-2">
+                  <textarea
+                  rows={2}
                   value={answerDraft}
                   onChange={(e) => setAnswerDraft(e.target.value)}
-                  placeholder="Type your answer..."
-                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  onKeyDown={handleAnswerKeyDown}
+                  placeholder="Type your answer, then press Enter…"
+                  autoFocus
+                  className="min-w-0 flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
                 <button
-                  onClick={handleSendAnswer}
-                  disabled={!answerDraft.trim()}
-                  className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white disabled:bg-slate-200 disabled:text-slate-400"
+                  onClick={() => void handleSendAnswer()}
+                  disabled={!answerDraft.trim() || answerSaving || !segments[0]}
+                  title={!segments[0] ? "Add the transcription first so this answer can be saved." : "Save answer"}
+                  className="flex h-10 items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white disabled:bg-slate-200 disabled:text-slate-400"
                 >
                   <Send size={14} />
+                  {answerSaving ? "Saving…" : "Enter"}
                 </button>
+                </div>
+                {!segments[0] && (
+                  <p className="mt-2 text-xs text-amber-700">Add a transcription before answering questions.</p>
+                )}
+              </div>
+            ) : questions.length > 0 ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+                All {questions.length} questions have been answered.
+              </div>
+            ) : null}
+
+            {queue.length > 0 && (
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Question queue</h3>
+                <span className="text-xs text-slate-400">{unansweredQuestions.length} remaining</span>
               </div>
             )}
 
             <div className="space-y-3">
-              {questions
-                .filter((q) => answers[q.id] !== undefined)
-                .map((q) => (
-                  <div key={q.id} className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-sm font-medium text-slate-800">{q.questionText}</p>
+              {queue.map((q, index) => {
+                const isAnswered = answers[q.id] !== undefined;
+                const isCurrent = q.id === currentQuestion?.id;
+                return (
+                  <div key={q.id} className={`rounded-xl border bg-white p-3 ${isCurrent ? "border-blue-300" : "border-slate-200"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-blue-600">Segment {q.segmentNo}</span>
+                          <span className={`text-[11px] font-medium ${isAnswered ? "text-emerald-600" : "text-slate-400"}`}>
+                            {isAnswered ? "Answered" : isCurrent ? "Answering now" : `Waiting · #${index + 1}`}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium text-slate-800">{q.questionText}</p>
+                      </div>
+                      {isAnswered && <Check size={16} className="mt-0.5 shrink-0 text-emerald-600" />}
+                    </div>
                     {editingQuestionId === q.id ? (
                       <div className="mt-2 flex gap-2">
                         <input
@@ -595,7 +660,7 @@ export default function AnnotationControls({
                           Save
                         </button>
                       </div>
-                    ) : (
+                    ) : isAnswered ? (
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <p className="text-sm text-slate-600">{answers[q.id]}</p>
                         <button
@@ -605,9 +670,10 @@ export default function AnnotationControls({
                           Edit
                         </button>
                       </div>
-                    )}
+                    ) : null}
                   </div>
-                ))}
+                );
+              })}
               {questions.length === 0 && !questionsLoading && (
                 <p className="text-sm text-slate-400 italic">No active questions.</p>
               )}

@@ -87,6 +87,15 @@ export async function submitAnswer(
 }
 
 
-export async function updateAnswer(segmentResponseId: number, questionId: number, answer: string) {
-  return (await api.post(`/question-answers/${segmentResponseId}/${questionId}`, { answer })).data as QuestionAnswerDto;
+export async function updateAnswer(
+  segmentResponseId: number,
+  questionId: number,
+  answer: string,
+): Promise<QuestionAnswerDto> {
+  const response = await api.put(
+    `/question-answers/${segmentResponseId}/${questionId}`,
+    { answer },
+  );
+
+  return response.data as QuestionAnswerDto;
 }

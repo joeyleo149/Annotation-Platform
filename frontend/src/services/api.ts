@@ -57,6 +57,19 @@ const api = {
     return { data: await handleResponse(response) };
   },
 
+  put: async (path: string, body?: unknown) => {
+    const url = path.startsWith('/api') ? path : `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: headers(),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    return { data: await handleResponse(response) };
+  },
+
   patch: async (path: string, body?: unknown) => {
     const url = path.startsWith('/api') ? path : `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
     const response = await fetch(url, { method: 'PATCH', credentials: 'include', headers: headers(), body: body ? JSON.stringify(body) : undefined });

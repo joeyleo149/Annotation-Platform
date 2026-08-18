@@ -496,6 +496,7 @@ public sealed class AnnotationAssignmentService(
             CancellationToken cancellationToken = default)
     {
         var session = await context.AnnotationSessions
+            .Include(item => item.Video)
             .Include(item => item.SegmentResponses)
                 .ThenInclude(item => item.QuestionAnswers)
             .SingleOrDefaultAsync(
@@ -527,24 +528,22 @@ public sealed class AnnotationAssignmentService(
                 "Add a transcription before finishing this video.");
         }
 
-        var activeQuestions = await context.Questions
-            .Where(question => question.IsActive)
-            .Select(question => new { question.Id, question.SegmentNo })
+        var activeQuestionIds = await context.Questions
+            .Where(question =>
+                question.IsActive &&
+                question.DatasetId == session.Video.DatasetId)
+            .Select(question => question.Id)
             .ToListAsync(cancellationToken);
 
-        if (activeQuestions.Count > 0)
+        if (activeQuestionIds.Count > 0)
         {
-            var missingAnswers = session.SegmentResponses
-                .Any(segment =>
-                {
-                    var answeredQuestionIds = segment.QuestionAnswers
-                        .Select(answer => answer.QuestionId)
-                        .ToHashSet();
+            var answeredQuestionIds = session.SegmentResponses
+                .SelectMany(segment => segment.QuestionAnswers)
+                .Where(answer => !string.IsNullOrWhiteSpace(answer.Answer))
+                .Select(answer => answer.QuestionId)
+                .ToHashSet();
 
-                    return activeQuestions
-                        .Where(question => question.SegmentNo == segment.SegmentNumber)
-                        .Any(question => !answeredQuestionIds.Contains(question.Id));
-                });
+            var missingAnswers = activeQuestionIds.Any(questionId => !answeredQuestionIds.Contains(questionId));
 
             if (missingAnswers)
             {
