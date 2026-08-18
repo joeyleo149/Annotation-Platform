@@ -7,6 +7,7 @@ import {
   updateAnswer,
   type QuestionDto,
 } from "../services/Questionanswerservice";
+import { getToken } from "../services/tokenStore";
 
 export interface Segment {
   id: string;
@@ -318,7 +319,7 @@ export default function AnnotationControls({
         const ext = rawAudio.type.includes("mp4") ? "mp4" : rawAudio.type.includes("ogg") ? "ogg" : "webm";
         formData.append("audio", rawAudio, `recording.${ext}`);
 
-        const token = localStorage.getItem("annotate_pro_token");
+        const token = getToken();
         const res = await fetch("/api/transcribe", {
           method: "POST",
           credentials: "include",

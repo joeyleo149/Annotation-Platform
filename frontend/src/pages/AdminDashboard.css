@@ -147,6 +147,29 @@ button {
   gap: 10px;
 }
 
+.sidebar-profile {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 8px;
+  margin: -8px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  transition: 160ms ease;
+}
+
+.sidebar-profile:hover {
+  background: #f5f8ff;
+}
+
+.sidebar-profile.active {
+  background: #edf4ff;
+}
+
 .avatar {
   width: 38px;
   height: 38px;
@@ -1120,7 +1143,8 @@ td strong {
   }
 
   .sidebar-footer {
-    display: none;
+    display: flex;
+    margin-top: 12px;
   }
 
   .admin-header,

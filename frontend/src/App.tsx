@@ -136,7 +136,7 @@ export default function App() {
             }
           />
 
-          <Route path="/admin/profile" element={<ProfilePage />} />
+          <Route path="/admin/profile" element={<AdminDashboard />} />
 
           <Route
             path="/admin/upload"

@@ -1,7 +1,7 @@
+import { getToken } from './tokenStore';
+
 const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL ?? '/api';
-
-const tokenStorageKey = 'annotate_pro_token';
 
 export type UploadProgressHandler =
   (percentage: number) => void;
@@ -200,8 +200,7 @@ function createHeaders(
 ): Headers {
   const headers = new Headers(existingHeaders);
 
-  const token =
-    localStorage.getItem(tokenStorageKey);
+  const token = getToken();
 
   if (token) {
     headers.set(
@@ -295,8 +294,7 @@ function uploadForm<T>(
 
     xhr.withCredentials = true;
 
-    const token =
-      localStorage.getItem(tokenStorageKey);
+    const token = getToken();
 
     if (token) {
       xhr.setRequestHeader(

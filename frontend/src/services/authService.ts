@@ -1,14 +1,13 @@
 import api from './api';
+import { getToken as readToken, setToken, clearToken } from './tokenStore';
 
 export type Role = 'Admin' | 'Annotator';
 export type AuthUser = { userId: number; email: string; role: Role };
 type LoginResponse = AuthUser & { token: string };
 
-const TOKEN_KEY = 'annotate_pro_token';
-
 export async function login(username: string, password: string) {
   const { data } = await api.post('/auth/login', { username, password }) as { data: LoginResponse };
-  localStorage.setItem(TOKEN_KEY, data.token);
+  setToken(data.token);
   window.dispatchEvent(new Event('auth-changed'));
   return data;
 }
@@ -21,11 +20,11 @@ export async function register(payload: {
 }
 
 export function logout() {
-  localStorage.removeItem(TOKEN_KEY);
+  clearToken();
   window.dispatchEvent(new Event('auth-changed'));
 }
 
-export function getToken() { return localStorage.getItem(TOKEN_KEY); }
+export function getToken() { return readToken(); }
 
 export function getCurrentUser(): AuthUser | null {
   const token = getToken();

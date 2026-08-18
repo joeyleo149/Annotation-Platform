@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import {
   adminApi,
@@ -50,7 +50,6 @@ const navigation: {
   { id: 'sessions', label: 'Sessions', icon: '◷' },
   { id: 'uploads', label: 'Uploads', icon: '↑' },
   { id: 'surveyStats', label: 'Survey Statistics', icon: '☷' },
-  { id: 'profile', label: 'Profile', icon: '👤' },
   { id: 'addAdmin', label: 'Add Admin', icon: '+' },
   { id: 'addQuestion', label: 'Add Question', icon: '?' },
   { id: 'questions', label: 'Questions', icon: '≡' },
@@ -80,9 +79,12 @@ function getErrorMessage(error: unknown): string {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const currentUser = getCurrentUser();
   const [view, setView] =
-    useState<DashboardView>('overview');
+    useState<DashboardView>(
+      location.pathname === '/admin/profile' ? 'profile' : 'overview',
+    );
 
   const [datasets, setDatasets] =
     useState<DatasetSummary[]>([]);
@@ -1286,11 +1288,18 @@ const hidesDatasetControls = view === 'addAdmin' || view === 'surveyStats'|| vie
         </nav>
 
         <div className="sidebar-footer">
-          <span className="avatar admin">{currentUser?.email.slice(0, 2).toUpperCase() ?? 'AD'}</span>
-          <div className="admin-identity">
-            <strong>{currentUser?.email ?? 'Administrator'}</strong>
-            <small>Administrator</small>
-          </div>
+          <button
+            type="button"
+            className={`sidebar-profile${view === 'profile' ? ' active' : ''}`}
+            onClick={() => setView('profile')}
+            aria-label="Open profile"
+          >
+            <span className="avatar admin">{currentUser?.email.slice(0, 2).toUpperCase() ?? 'AD'}</span>
+            <div className="admin-identity">
+              <strong>{currentUser?.email ?? 'Administrator'}</strong>
+              <small>Administrator</small>
+            </div>
+          </button>
           <button className="admin-logout" type="button" onClick={() => { logout(); navigate('/login', { replace: true }); }} aria-label="Log out">
             Log out
           </button>
@@ -1301,8 +1310,10 @@ const hidesDatasetControls = view === 'addAdmin' || view === 'surveyStats'|| vie
         <header className="admin-header">
           <div>
             <h1>
-              {navigation.find(item => item.id === view)
-                ?.label ?? 'Overview'}
+              {view === 'profile'
+                ? 'Profile'
+                : navigation.find(item => item.id === view)
+                    ?.label ?? 'Overview'}
             </h1>
             <p>
               Manage datasets, annotation work and progress.

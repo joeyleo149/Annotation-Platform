@@ -1,8 +1,10 @@
+import { getToken } from "./tokenStore";
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
 export interface SegmentResponseDto { id: number; annotationSessionId: number; segmentNumber: number; startTime: string; endTime: string; transcript: string; submittedAt: string; }
 export interface SegmentResponseRequest { annotationSessionId: number; segmentNumber: number; startTime: string; endTime: string; transcript: string; submittedAt?: string; }
 function endpoint(path = "") { return `${apiBaseUrl}/segment-responses${path}`; }
-function requestHeaders(): HeadersInit { const token = localStorage.getItem("annotate_pro_token"); return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }; }
+function requestHeaders(): HeadersInit { const token = getToken(); return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }; }
 async function parseResponse<T>(response: Response): Promise<T> { const text = await response.text(); let body: T | { error?: string; message?: string } | undefined; try { body = text ? JSON.parse(text) : undefined; } catch { body = { message: text }; } if (!response.ok) { const details = body as { error?: string; message?: string } | undefined; throw new Error(details?.error ?? details?.message ?? `Request failed (${response.status}).`); } return body as T; }
 const withSubmittedAt = (request: SegmentResponseRequest) => ({ ...request, submittedAt: request.submittedAt ?? new Date().toISOString() });
 export async function getSegmentsBySession(sessionId: number) { const response = await fetch(endpoint("/"), { headers: requestHeaders() }); const rows = await parseResponse<SegmentResponseDto[]>(response); return rows.filter(row => row.annotationSessionId === sessionId); }

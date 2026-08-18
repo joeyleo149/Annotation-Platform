@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import VideoPlayer, { type VideoPlayerHandle } from "../components/VideoPlayer";
 import AnnotationControls, { type Segment } from "../components/AnnotationControls";
 import api from "../services/api";
+import { getToken } from "../services/tokenStore";
 import { WaypointGraph } from "../components/WaypointGraph";
 import {
   getSegmentsBySession,
@@ -355,7 +356,7 @@ export default function VideoAnnotatorPage() {
           future: parsedTrajectory.future,
         });
 
-        const token = localStorage.getItem("annotate_pro_token");
+        const token = getToken();
         const streamResponse = await fetch(`/api/videos/${session.videoId}/stream`, {
           credentials: "include",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -513,7 +514,7 @@ export default function VideoAnnotatorPage() {
     }
 
     try {
-      const token = localStorage.getItem("annotate_pro_token");
+      const token = getToken();
       const response = await fetch(`/api/annotation-sessions/${sessionId}/complete`, {
         method: "POST",
         credentials: "include",

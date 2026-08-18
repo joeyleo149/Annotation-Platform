@@ -1,3 +1,5 @@
+import { getToken } from './tokenStore';
+
 // Default to '/api' so Vite proxy catches relative routes
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -27,7 +29,7 @@ async function handleResponse(response: Response) {
 }
 
 function headers() {
-  const token = localStorage.getItem('annotate_pro_token');
+  const token = getToken();
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 
