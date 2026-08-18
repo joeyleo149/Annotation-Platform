@@ -39,6 +39,32 @@ public sealed class AuthService(
     private const int SaltSize = 16;
     private const int HashSize = 32;
 
+    public async Task<PasswordResetUser?> FindUserByEmailAsync(string email, CancellationToken ct)
+    {
+        var normalized = email.Trim().ToLowerInvariant();
+        var admin = await context.Admins.AsNoTracking().SingleOrDefaultAsync(item => item.Email == normalized, ct);
+        if (admin is not null) return new(admin.Name, admin.Email);
+        var annotator = await context.Annotators.AsNoTracking().SingleOrDefaultAsync(item => item.Email == normalized, ct);
+        return annotator is null ? null : new(annotator.Name, annotator.Email);
+    }
+
+    public async Task<bool> ResetPasswordByEmailAsync(string email, string newPassword, CancellationToken ct)
+    {
+        var normalized = email.Trim().ToLowerInvariant();
+        var admin = await context.Admins.SingleOrDefaultAsync(item => item.Email == normalized, ct);
+        if (admin is not null)
+        {
+            admin.PasswordHash = HashPassword(newPassword);
+            await context.SaveChangesAsync(ct);
+            return true;
+        }
+        var annotator = await context.Annotators.SingleOrDefaultAsync(item => item.Email == normalized, ct);
+        if (annotator is null) return false;
+        annotator.PasswordHash = HashPassword(newPassword);
+        await context.SaveChangesAsync(ct);
+        return true;
+    }
+
     public async Task<AuthUser?> AuthenticateAsync(
         string username,
         string password,
@@ -418,6 +444,8 @@ public sealed record AuthUser(
     string Username,
     string Email,
     string Role);
+
+public sealed record PasswordResetUser(string Username, string Email);
 
 public sealed record RegisterUser(
     string Username,

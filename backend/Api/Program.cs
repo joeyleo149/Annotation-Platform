@@ -140,6 +140,9 @@ builder.Services.AddScoped<ISurveyStatsService, SurveyStatsService>();
 builder.Services.AddScoped<
     AdminInvitationEmailSender>();
 
+builder.Services.AddSingleton<PasswordResetOtpService>();
+builder.Services.AddScoped<PasswordResetEmailSender>();
+
 builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<

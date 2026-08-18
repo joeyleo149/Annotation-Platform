@@ -8,6 +8,7 @@ import {
 
 import AdminDashboard from './pages/AdminDashboard';
 import LoginPage from './pages/LoginPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.tsx';
 import RegisterPage from './pages/RegisterPage';
 import VideoAnnotatorPage from './pages/VideoAnnotatorPage';
 import { AnnotatorDashboard } from './pages/AnnotatorDashboard';
@@ -124,6 +125,11 @@ export default function App() {
           element={<RegisterPage />}
         />
 
+        <Route
+          path="/forgot-password"
+          element={<ForgotPasswordPage />}
+        />
+
         {/* Admin routes: no external sidebar */}
         <Route element={<AdminProtectedRoute />}>
           <Route
@@ -136,7 +142,7 @@ export default function App() {
             }
           />
 
-          <Route path="/admin/profile" element={<AdminDashboard />} />
+          <Route path="/admin/profile" element={<ProfilePage />} />
 
           <Route
             path="/admin/upload"
