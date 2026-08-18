@@ -69,6 +69,18 @@ public sealed class AnnotationExportService(
             .OrderBy(session => session.Id)
             .Select(session =>
             {
+                // Only surface questions that already existed when this session
+                // was completed (or now, if still open). This mirrors the
+                // annotator UI (QuestionEndpoints), which never shows a question
+                // created after the annotator finished. Without this, the export
+                // stamps every current dataset question onto old sessions as
+                // "IsAnswered: false", which looks like the annotator skipped a
+                // question they were never actually asked.
+                var questionCutoff = session.CompletedAt ?? DateTimeOffset.UtcNow;
+                var sessionScopedQuestions = questions
+                    .Where(question => question.CreatedAt <= questionCutoff)
+                    .ToList();
+
                 var answerByQuestionId = session.SegmentResponses
                     .SelectMany(segment => segment.QuestionAnswers.Select(answer => new
                     {
@@ -82,7 +94,7 @@ public sealed class AnnotationExportService(
                         group => group.Key,
                         group => group.OrderByDescending(item => item.SubmittedAt).First());
 
-                var sessionQuestions = questions
+                var sessionQuestions = sessionScopedQuestions
                     .Select(question =>
                     {
                         var isAnswered = answerByQuestionId.TryGetValue(question.Id, out var savedAnswer);
