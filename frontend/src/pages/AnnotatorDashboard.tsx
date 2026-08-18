@@ -18,24 +18,12 @@ type Dataset = {
   isArchived?: boolean;
 };
 
-type TaskRequest = {
-  id: number;
-  annotatorId: number;
-  datasetId: number;
-  status: string;
-};
-
 type AutomaticRequestResult = {
   assignment: {
     assigned: boolean;
     message: string;
     annotationSessionId: number | null;
   };
-};
-
-type VideoSummary = {
-  id: number;
-  datasetId?: number | null;
 };
 
 const groups = [
@@ -63,11 +51,9 @@ export function AnnotatorDashboard() {
 
     const loadDashboard = async () => {
       try {
-        const [sessionResponse, datasetResponse, requestResponse, videoResponse] = await Promise.all([
+        const [sessionResponse, datasetResponse] = await Promise.all([
           api.get('/annotation-sessions/mine'),
-          api.get('/datasets/?includeArchived=false'),
-          api.get('/annotation-sessions/requests?status=Waiting'),
-          api.get('/videos/?includeArchived=false'),
+          api.get('/datasets/available'),
         ]);
 
         if (ignore) {
@@ -75,37 +61,8 @@ export function AnnotatorDashboard() {
         }
 
         const sessionList = (sessionResponse.data as Session[]) ?? [];
-        const requestList = (requestResponse.data as TaskRequest[]) ?? [];
-        const videoList = (videoResponse.data as VideoSummary[]) ?? [];
-
-        const activeSessionVideoIds = new Set(
-          sessionList
-            .filter(session => session.status === 'Assigned' || session.status === 'InProgress')
-            .map(session => session.videoId),
-        );
-
-        const activeDatasetIds = new Set<number>();
-        for (const video of videoList) {
-          if (video.datasetId && activeSessionVideoIds.has(video.id)) {
-            activeDatasetIds.add(video.datasetId);
-          }
-        }
-
-        const waitingDatasetIds = new Set<number>();
-        for (const request of requestList) {
-          if (request.annotatorId === user?.userId && request.status === 'Waiting') {
-            waitingDatasetIds.add(request.datasetId);
-          }
-        }
-
-        const nextBlocked = new Set<number>([
-          ...activeDatasetIds,
-          ...waitingDatasetIds,
-        ]);
-
         setSessions(sessionList);
         setDatasets((datasetResponse.data as Dataset[]) ?? []);
-        setBlockedDatasetIds(nextBlocked);
       } catch (loadError) {
         if (!ignore) {
           setError(
@@ -138,11 +95,6 @@ export function AnnotatorDashboard() {
   const handleRequestDataset = async (datasetId: number, datasetName: string) => {
     if (!user) {
       setError('Please log in to request annotation access.');
-      return;
-    }
-
-    if (blockedDatasetIds.has(datasetId)) {
-      setError('You already have an active or pending request for this dataset.');
       return;
     }
 
@@ -182,8 +134,7 @@ export function AnnotatorDashboard() {
       setStatusMessage(
         wasAssigned
           ? `A video from "${datasetName}" was assigned automatically.`
-          : `Request received for "${datasetName}". ` +
-            'It remains waiting until an eligible video is available.',
+          : `No eligible video from "${datasetName}" is available anymore.`,
       );
     } catch (requestError) {
       setError(
@@ -250,7 +201,7 @@ export function AnnotatorDashboard() {
                   <button
                     type="button"
                     className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    disabled={requestingIds.includes(dataset.id) || blockedDatasetIds.has(dataset.id)}
+                    disabled={requestingIds.includes(dataset.id)}
                     onClick={() => handleRequestDataset(dataset.id, dataset.name)}
                   >
                     {requestingIds.includes(dataset.id)

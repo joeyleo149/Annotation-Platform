@@ -1,4 +1,5 @@
 using Service.Services;
+using System.Security.Claims;
 
 namespace Api.Endpoints;
 
@@ -15,6 +16,12 @@ public static class DatasetEndpoints
             "/",
             GetDatasetsAsync);
 
+        group.MapGet(
+            "/available",
+            GetAvailableDatasetsAsync)
+            .RequireAuthorization(
+                policy => policy.RequireRole("Annotator"));
+
         group.MapPatch(
             "/{datasetId:int}/archive",
             ArchiveDatasetAsync);
@@ -28,6 +35,28 @@ public static class DatasetEndpoints
             ArchiveEligibleDatasetsAsync);
 
         return group;
+    }
+
+    private static async Task<IResult> GetAvailableDatasetsAsync(
+        ClaimsPrincipal principal,
+        AnnotationAssignmentService assignmentService,
+        CancellationToken cancellationToken)
+    {
+        if (!int.TryParse(
+                principal.FindFirstValue(
+                    ClaimTypes.NameIdentifier),
+                out var annotatorId) ||
+            annotatorId <= 0)
+        {
+            return Results.Unauthorized();
+        }
+
+        var datasets = await assignmentService
+            .GetAvailableDatasetsForAnnotatorAsync(
+                annotatorId,
+                cancellationToken);
+
+        return Results.Ok(datasets);
     }
 
     private static async Task<IResult> GetDatasetsAsync(
