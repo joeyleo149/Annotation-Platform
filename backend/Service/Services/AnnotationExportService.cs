@@ -16,79 +16,86 @@ public sealed class AnnotationExportService(
             WriteIndented = true
         };
 
-    public async Task<AnnotationExportFile?>
-        ExportVideoAsync(
-            int videoId,
-            string format,
-            bool includeIncomplete,
-            CancellationToken cancellationToken = default)
+    public async Task<AnnotationExportFile?> ExportVideoAsync(int videoId, string format, bool includeIncomplete, CancellationToken cancellationToken = default)
     {
         ValidateFormat(format);
+        var video = await BuildVideoQuery().SingleOrDefaultAsync(item => item.Id == videoId, cancellationToken);
+        if (video is null) return null;
 
-        var video = await BuildVideoQuery()
-            .SingleOrDefaultAsync(
-                item => item.Id == videoId,
-                cancellationToken);
-
-        if (video is null)
-        {
-            return null;
-        }
-
-        var document = CreateDocument(
-            "Video",
-            video.Dataset,
-            [video],
-            includeIncomplete);
-
-        return CreateExportFile(
-            document,
-            format,
-            $"video-{video.Id}-annotations");
+        var activeQuestions = await GetActiveQuestionsAsync(video.DatasetId, cancellationToken);
+        var document = CreateDocument("Video", video.Dataset, [video], includeIncomplete, activeQuestions);
+        return CreateExportFile(document, format, $"video-{video.Id}-annotations");
     }
 
-    public async Task<AnnotationExportFile?>
-        ExportDatasetAsync(
-            int datasetId,
-            string format,
-            bool includeIncomplete,
-            CancellationToken cancellationToken = default)
+    public async Task<AnnotationExportFile?> ExportDatasetAsync(int datasetId, string format, bool includeIncomplete, CancellationToken cancellationToken = default)
     {
         ValidateFormat(format);
+        var dataset = await context.Datasets.AsNoTracking().SingleOrDefaultAsync(item => item.Id == datasetId, cancellationToken);
+        if (dataset is null) return null;
 
-        var dataset = await context.Datasets
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.Id == datasetId,
-                cancellationToken);
+        var videos = await BuildVideoQuery().Where(video => video.DatasetId == datasetId)
+            .OrderBy(video => video.DatasetRowIndex).ThenBy(video => video.Id).ToListAsync(cancellationToken);
 
-        if (dataset is null)
-        {
-            return null;
-        }
+        var activeQuestions = await GetActiveQuestionsAsync(datasetId, cancellationToken);
+        var document = CreateDocument("Dataset", dataset, videos, includeIncomplete, activeQuestions);
 
-        var videos = await BuildVideoQuery()
-            .Where(video =>
-                video.DatasetId == datasetId)
-            .OrderBy(video =>
-                video.DatasetRowIndex)
-            .ThenBy(video => video.Id)
-            .ToListAsync(cancellationToken);
+        var safeDatasetName = CreateSafeFileName(dataset.Name);
+        return CreateExportFile(document, format, $"dataset-{dataset.Id}-{safeDatasetName}-annotations");
+    }
 
-        var document = CreateDocument(
-            "Dataset",
-            dataset,
-            videos,
-            includeIncomplete);
+    private async Task<IReadOnlyList<Question>> GetActiveQuestionsAsync(int? datasetId, CancellationToken ct)
+    {
+        if (!datasetId.HasValue) return [];
+        return await context.Questions.AsNoTracking()
+            .Where(question => question.IsActive && question.DatasetId == datasetId.Value)
+            .ToListAsync(ct);
+    }
 
-        var safeDatasetName =
-            CreateSafeFileName(dataset.Name);
+    private static AnnotationExportDocument CreateDocument(string scope, Dataset? dataset, IReadOnlyCollection<Video> videos, bool includeIncomplete, IReadOnlyList<Question> activeQuestions)
+    {
+        var exportedVideos = videos.Select(video => CreateVideoExport(video, includeIncomplete, activeQuestions)).ToList();
 
-        return CreateExportFile(
-            document,
-            format,
-            $"dataset-{dataset.Id}-" +
-            $"{safeDatasetName}-annotations");
+        return new AnnotationExportDocument(
+            DateTimeOffset.UtcNow, scope, dataset?.Id, dataset?.Name,
+            exportedVideos.Count, exportedVideos.Sum(video => video.Sessions.Count), exportedVideos);
+    }
+
+    private static VideoAnnotationExport CreateVideoExport(Video video, bool includeIncomplete, IReadOnlyList<Question> activeQuestions)
+    {
+        var sessions = video.AnnotationSessions
+            .Where(session => includeIncomplete || session.Status == AnnotationSessionStatus.Completed)
+            .OrderBy(session => session.Id)
+            .Select(session =>
+            {
+                var segments = session.SegmentResponses
+                    .OrderBy(segment => segment.SegmentNumber)
+                    .Select(segment =>
+                    {
+                        var answeredByQuestionId = segment.QuestionAnswers.ToDictionary(a => a.QuestionId, a => a.Answer);
+                        var questionAnswers = activeQuestions
+                            .Where(question => question.SegmentNo == segment.SegmentNumber)
+                            .Select(question => new QuestionAnswerExport(
+                                question.Id,
+                                answeredByQuestionId.TryGetValue(question.Id, out var answer) ? answer : "-"))
+                            .OrderBy(qa => qa.QuestionId)
+                            .ToList();
+
+                        return new SegmentAnnotationExport(
+                            segment.Id, segment.SegmentNumber, segment.Transcript, segment.SubmittedAt, questionAnswers);
+                    })
+                    .ToList();
+
+                return new AnnotationSessionExport(
+                    session.Id, session.AnnotatorId, session.Annotator.Name, session.Status,
+                    session.AssignedAt, session.ExpiresAt, session.StartedAt, session.CompletedAt, segments);
+            })
+            .ToList();
+
+        return new VideoAnnotationExport(
+            video.Id, video.DatasetId, video.FileName, video.ScenarioId, video.DatasetRowIndex,
+            video.ScenarioType, video.DrivingInstruction, video.RequiredAnnotationCount,
+            sessions.Count(session => session.Status == AnnotationSessionStatus.Completed),
+            video.IsArchived, sessions);
     }
 
     private IQueryable<Video> BuildVideoQuery()
@@ -107,88 +114,6 @@ public sealed class AnnotationExportService(
                     session.SegmentResponses)
                 .ThenInclude(segment =>
                     segment.QuestionAnswers);
-    }
-
-    private static AnnotationExportDocument
-        CreateDocument(
-            string scope,
-            Dataset? dataset,
-            IReadOnlyCollection<Video> videos,
-            bool includeIncomplete)
-    {
-        var exportedVideos = videos
-            .Select(video =>
-                CreateVideoExport(
-                    video,
-                    includeIncomplete))
-            .ToList();
-
-        return new AnnotationExportDocument(
-            DateTimeOffset.UtcNow,
-            scope,
-            dataset?.Id,
-            dataset?.Name,
-            exportedVideos.Count,
-            exportedVideos.Sum(video =>
-                video.Sessions.Count),
-            exportedVideos);
-    }
-
-    private static VideoAnnotationExport
-        CreateVideoExport(
-            Video video,
-            bool includeIncomplete)
-    {
-        var sessions = video.AnnotationSessions
-            .Where(session =>
-                includeIncomplete ||
-                session.Status ==
-                    AnnotationSessionStatus.Completed)
-            .OrderBy(session => session.Id)
-            .Select(session =>
-                new AnnotationSessionExport(
-                    session.Id,
-                    session.AnnotatorId,
-                    session.Annotator.Name,
-                    session.Status,
-                    session.AssignedAt,
-                    session.ExpiresAt,
-                    session.StartedAt,
-                    session.CompletedAt,
-                    session.SegmentResponses
-                        .OrderBy(segment =>
-                            segment.SegmentNumber)
-                        .Select(segment =>
-                            new SegmentAnnotationExport(
-                                segment.Id,
-                                segment.SegmentNumber,
-                                segment.Transcript,
-                                segment.SubmittedAt,
-                                segment.QuestionAnswers
-                                    .OrderBy(answer =>
-                                        answer.QuestionNumber)
-                                    .Select(answer =>
-                                        new QuestionAnswerExport(
-                                            answer.QuestionNumber,
-                                            answer.Answer))
-                                    .ToList()))
-                        .ToList()))
-            .ToList();
-
-        return new VideoAnnotationExport(
-            video.Id,
-            video.DatasetId,
-            video.FileName,
-            video.ScenarioId,
-            video.DatasetRowIndex,
-            video.ScenarioType,
-            video.DrivingInstruction,
-            video.RequiredAnnotationCount,
-            sessions.Count(session =>
-                session.Status ==
-                    AnnotationSessionStatus.Completed),
-            video.IsArchived,
-            sessions);
     }
 
     private static AnnotationExportFile CreateExportFile(

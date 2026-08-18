@@ -98,7 +98,7 @@ builder.Services.AddDbContext<AppDbContext>(
         options.UseSqlServer(
             builder.Configuration
                 .GetConnectionString(
-                    "DefaultConnection")));
+                    "DefaultConnection"),b => b.MigrationsAssembly("Context")));
 
 builder.Services.AddScoped<VideoService>();
 

@@ -322,6 +322,7 @@ export default function VideoAnnotatorPage() {
   const [clipName, setClipName] = useState(MOCK_MODE ? MOCK_SESSION.clipName : "");
 
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [datasetId, setDatasetId] = useState<number | null>(null);
 
   useEffect(() => {
     if (MOCK_MODE) return;
@@ -339,6 +340,8 @@ export default function VideoAnnotatorPage() {
 
         const videoResponse = await api.get(`/videos/${session.videoId}`);
         const video = videoResponse.data as VideoDetails | null;
+        
+        setDatasetId(video?.datasetId ?? null);
 
         if (!video) {
           throw new Error("The assigned video could not be found.");
@@ -552,6 +555,7 @@ export default function VideoAnnotatorPage() {
       <div className="flex-1 px-5 py-4 min-h-0 overflow-y-auto">
         <AnnotationControls
           sessionId={String(sessionId)}
+          datasetId={datasetId}
           currentTime={currentTime}
           segments={segments}
           isLastVideo={IS_LAST_VIDEO}

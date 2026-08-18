@@ -40,6 +40,14 @@ export async function submitAnswer(payload: QuestionAnswerDto): Promise<Question
     throw new Error(err.error ?? `Failed to submit answer: ${res.status}`);
   }
   return res.json();
+import api from './api';
+export interface QuestionDto { id: number; datasetId?: number | null; questionText: string; segmentNo: 1 | 2 | 3; isActive: boolean; }
+export interface QuestionAnswerDto { segmentResponseId: number; questionId: number; answer: string; }
+export async function getQuestions(includeInactive = false, datasetId?: number | null, sessionId?: number | null) {
+  const params = new URLSearchParams({ includeInactive: String(includeInactive) });
+  if (datasetId !== undefined && datasetId !== null) params.set('datasetId', String(datasetId));
+  if (sessionId !== undefined && sessionId !== null) params.set('sessionId', String(sessionId));
+  return (await api.get(`/questions?${params.toString()}`)).data as QuestionDto[];
 }
 
 export async function updateAnswer(

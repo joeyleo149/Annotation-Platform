@@ -11,6 +11,7 @@ export interface Segment {
 
 interface AnnotationControlsProps {
   sessionId?: string;
+  datasetId?: number | null; 
   currentTime: number;
   segments: Segment[];
   isLastVideo?: boolean; // controls whether the nav button reads "Next Video" or "Done"
