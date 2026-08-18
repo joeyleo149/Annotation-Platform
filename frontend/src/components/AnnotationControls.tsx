@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { FileText, HelpCircle, Trash2, Send, Mic, MicOff, Play, Check, ChevronRight } from "lucide-react";
-import { getAnswersForSegment, getQuestions, submitAnswer, type QuestionDto } from "../services/Questionanswerservice";
+import { getQuestions, submitAnswer, updateAnswer, type QuestionDto } from "../services/Questionanswerservice";
 
 export interface Segment {
   id: string;
@@ -8,14 +8,12 @@ export interface Segment {
   endTime: number;
   text: string;
   labels: string[];
-  segmentNumber: number;
 }
 
 interface AnnotationControlsProps {
   sessionId?: string;
-  datasetId?: number | null; 
+  datasetId?: number | null;
   currentTime: number;
-  videoDuration?: number;
   segments: Segment[];
   isLastVideo?: boolean; // controls whether the nav button reads "Next Video" or "Done"
   onSeek: (seconds: number) => void;
@@ -54,6 +52,59 @@ function getSupportedRecordingMimeType(): string | undefined {
 
   return candidates.find((mimeType) => MediaRecorder.isTypeSupported(mimeType));
 }
+
+async function convertAudioBlobToWav(audioBlob: Blob): Promise<Blob> {
+  const arrayBuffer = await audioBlob.arrayBuffer();
+  const audioContext = new AudioContext();
+
+  try {
+    const decoded = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const channelCount = decoded.numberOfChannels;
+    const sampleRate = decoded.sampleRate;
+    const sampleCount = decoded.length;
+    const bytesPerSample = 2;
+    const blockAlign = channelCount * bytesPerSample;
+    const dataSize = sampleCount * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, value: string) => {
+      for (let i = 0; i < value.length; i += 1) {
+        view.setUint8(offset + i, value.charCodeAt(i));
+      }
+    };
+
+    writeString(0, "RIFF");
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channelCount, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeString(36, "data");
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
+      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+        const channel = decoded.getChannelData(channelIndex);
+        const value = Math.max(-1, Math.min(1, channel[sampleIndex]));
+        const intValue = value < 0 ? value * 0x8000 : value * 0x7fff;
+        view.setInt16(offset, intValue, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([buffer], { type: "audio/wav" });
+  } finally {
+    await audioContext.close();
+  }
+}
+
 function AutoResizingTextarea({
   value,
   onChange,
@@ -102,8 +153,9 @@ interface LocalDraft {
 }
 
 export default function AnnotationControls({
+  sessionId,
+  datasetId,
   currentTime,
-  videoDuration = 0,
   segments,
   isLastVideo = false,
   onSeek,
@@ -123,6 +175,19 @@ export default function AnnotationControls({
   const [micError, setMicError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  // Question & answer state — a question is picked from the dropdown, its
+  // answer is composed inline, then "sent" (saved to the backend). Saved
+  // answers render as their own card below the picker and can be edited
+  // in-place without going back through the dropdown.
+  const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [selectedQuestionId, setSelectedQuestionId] = useState<number | "">("");
+  const [answerDraft, setAnswerDraft] = useState("");
+  const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionsError, setQuestionsError] = useState<string | null>(null);
 
   // Tracks the last-seen parent values per segment id, separately from the
   // user's local draft. This is what makes it possible to tell "the parent
@@ -166,43 +231,67 @@ export default function AnnotationControls({
       return next;
     });
   }, [segments]);
-  const [questions, setQuestions] = useState<QuestionDto[]>([]);
-  const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [answerDrafts, setAnswerDrafts] = useState<Record<number, string>>({});
-  const [questionError, setQuestionError] = useState<string | null>(null);
 
+  // Load active questions whenever the Questions tab is opened, or the
+  // dataset/session context changes.
   useEffect(() => {
     if (tab !== "questions") return;
     let cancelled = false;
+
     const loadQuestions = async () => {
+      setQuestionsLoading(true);
+      setQuestionsError(null);
       try {
-        const active = await getQuestions(false);
-        const answerGroups = await Promise.all(segments.filter(segment => Number(segment.id) > 0).map(segment => getAnswersForSegment(Number(segment.id))));
-        if (!cancelled) {
-          setQuestions(active);
-          setAnswers(Object.fromEntries(answerGroups.flat().map(answer => [answer.questionId, answer.answer])));
-        }
-      } catch (error) { if (!cancelled) setQuestionError(error instanceof Error ? error.message : "Unable to load questions."); }
+        const active = await getQuestions(false, datasetId, sessionId ? Number(sessionId) : null);
+        if (!cancelled) setQuestions(active);
+      } catch (error) {
+        if (!cancelled) setQuestionsError(error instanceof Error ? error.message : "Unable to load questions.");
+      } finally {
+        if (!cancelled) setQuestionsLoading(false);
+      }
     };
+
     void loadQuestions();
-    return () => { cancelled = true; };
-  }, [segments, tab]);
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, datasetId, sessionId]);
 
-  const isQuestionUnlocked = (question: QuestionDto) => question.segmentNo === 1
-    ? currentTime >= 4
-    : question.segmentNo === 2
-      ? currentTime >= 7
-      : videoDuration > 0 && currentTime >= videoDuration - 0.15;
+  const handleSendAnswer = async () => {
+    const targetSegment = segments[0];
+    if (!targetSegment || selectedQuestionId === "" || !answerDraft.trim()) return;
 
-  const saveQuestionAnswer = async (question: QuestionDto) => {
-    const segment = segments.find(item => item.segmentNumber === question.segmentNo);
-    const answer = answerDrafts[question.id]?.trim();
-    if (!segment || !answer) return;
     try {
-      await submitAnswer({ segmentResponseId: Number(segment.id), questionId: question.id, answer });
-      setAnswers(previous => ({ ...previous, [question.id]: answer }));
-      setAnswerDrafts(previous => ({ ...previous, [question.id]: "" }));
-    } catch (error) { setQuestionError(error instanceof Error ? error.message : "Unable to save answer."); }
+      await submitAnswer({
+        segmentResponseId: Number(targetSegment.id),
+        questionId: Number(selectedQuestionId),
+        answer: answerDraft.trim(),
+      });
+      setAnswers((prev) => ({ ...prev, [Number(selectedQuestionId)]: answerDraft.trim() }));
+      setAnswerDraft("");
+      setSelectedQuestionId("");
+      setQuestionsError(null);
+    } catch (error) {
+      setQuestionsError(error instanceof Error ? error.message : "Unable to save answer.");
+    }
+  };
+
+  const startEditingAnswer = (questionId: number) => {
+    setEditingQuestionId(questionId);
+    setEditDraft(answers[questionId] ?? "");
+  };
+
+  const saveEditedAnswer = async (questionId: number) => {
+    const targetSegment = segments[0];
+    if (!targetSegment || !editDraft.trim()) return;
+
+    try {
+      await updateAnswer(Number(targetSegment.id), questionId, editDraft.trim());
+      setAnswers((prev) => ({ ...prev, [questionId]: editDraft.trim() }));
+      setEditingQuestionId(null);
+    } catch (error) {
+      setQuestionsError(error instanceof Error ? error.message : "Unable to update answer.");
+    }
   };
 
   const handleSubmitDraft = () => {
@@ -236,34 +325,34 @@ export default function AnnotationControls({
     };
 
     recorder.onstop = async () => {
-  stream.getTracks().forEach((track) => track.stop());
-  setIsRecording(false);
-  setIsTranscribing(true);
+      stream.getTracks().forEach((track) => track.stop());
+      setIsRecording(false);
+      setIsTranscribing(true);
 
-  try {
-    const rawAudio = new Blob(audioChunksRef.current, {
-      type: recorder.mimeType || "audio/webm",
-    });
-    const formData = new FormData();
-    const ext = rawAudio.type.includes("mp4") ? "mp4" : rawAudio.type.includes("ogg") ? "ogg" : "webm";
-    formData.append("audio", rawAudio, `recording.${ext}`);
+      try {
+        const rawAudio = new Blob(audioChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        const formData = new FormData();
+        const ext = rawAudio.type.includes("mp4") ? "mp4" : rawAudio.type.includes("ogg") ? "ogg" : "webm";
+        formData.append("audio", rawAudio, `recording.${ext}`);
 
-    const token = localStorage.getItem("annotate_pro_token");
-    const res = await fetch("/api/transcribe", {
-      method: "POST",
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    });
-    if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
-    const { text } = await res.json();
-    setDraftText((prev) => (prev ? prev + " " : "") + text);
-  } catch (e: any) {
-    setMicError(e.message ?? "Transcription failed.");
-  } finally {
-    setIsTranscribing(false);
-  }
-};
+        const token = localStorage.getItem("annotate_pro_token");
+        const res = await fetch("/api/transcribe", {
+          method: "POST",
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+        if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
+        const { text } = await res.json();
+        setDraftText((prev) => (prev ? prev + " " : "") + text);
+      } catch (e: any) {
+        setMicError(e.message ?? "Transcription failed.");
+      } finally {
+        setIsTranscribing(false);
+      }
+    };
 
     mediaRecorderRef.current = recorder;
     recorder.start();
@@ -374,7 +463,7 @@ export default function AnnotationControls({
         </button>
       </div>
 
-      {/* Segment tiles */}
+      {/* Segment tiles / Questions */}
       <div className="flex-1 overflow-y-auto mt-4 space-y-3 pr-1">
         {tab === "transcription" ? (
           segments.length === 0 ? (
@@ -444,23 +533,87 @@ export default function AnnotationControls({
               );
             })
           )
-        ) : <div className="space-y-3">
-          {questionError ? <p className="text-sm text-red-600">{questionError}</p> : null}
-          {questions.map(question => {
-            const unlocked = isQuestionUnlocked(question);
-            const segment = segments.find(item => item.segmentNumber === question.segmentNo);
-            const saved = answers[question.id];
-            return <article key={question.id} className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold text-blue-600">Segment {question.segmentNo}</span>{saved ? <span className="text-xs text-emerald-600">Answered</span> : null}</div>
-              <p className="text-sm font-medium text-slate-800">{question.questionText}</p>
-              {!unlocked ? <p className="mt-2 text-xs text-slate-400">Available {question.segmentNo === 1 ? "after 4 seconds" : question.segmentNo === 2 ? "after 7 seconds" : "when the video finishes"}.</p>
-                : saved ? <p className="mt-2 text-sm text-slate-600">{saved}</p>
-                : !segment ? <p className="mt-2 text-xs text-amber-600">Create the matching segment response before answering.</p>
-                : <div className="mt-2 flex gap-2"><input className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" value={answerDrafts[question.id] ?? ""} onChange={event => setAnswerDrafts(previous => ({ ...previous, [question.id]: event.target.value }))} placeholder="Enter your answer" /><button className="rounded-lg bg-blue-600 px-3 text-sm text-white" onClick={() => void saveQuestionAnswer(question)}>Save</button></div>}
-            </article>;
-          })}
-          {questions.length === 0 ? <p className="text-sm text-slate-400 italic">No active questions.</p> : null}
-        </div>}
+        ) : (
+          <div className="space-y-4">
+            {questionsError && <p className="text-sm text-red-600">{questionsError}</p>}
+
+            <div className="flex gap-2">
+              <select
+                value={selectedQuestionId}
+                onChange={(e) => setSelectedQuestionId(e.target.value === "" ? "" : Number(e.target.value))}
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">
+                  {questionsLoading ? "Loading questions..." : "Select a question..."}
+                </option>
+                {questions.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.questionText}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedQuestionId !== "" && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={answerDraft}
+                  onChange={(e) => setAnswerDraft(e.target.value)}
+                  placeholder="Type your answer..."
+                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={handleSendAnswer}
+                  disabled={!answerDraft.trim()}
+                  className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {questions
+                .filter((q) => answers[q.id] !== undefined)
+                .map((q) => (
+                  <div key={q.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-sm font-medium text-slate-800">{q.questionText}</p>
+                    {editingQuestionId === q.id ? (
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          type="text"
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => saveEditedAnswer(q.id)}
+                          className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <p className="text-sm text-slate-600">{answers[q.id]}</p>
+                        <button
+                          onClick={() => startEditingAnswer(q.id)}
+                          className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-700"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              {questions.length === 0 && !questionsLoading && (
+                <p className="text-sm text-slate-400 italic">No active questions.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* New annotation composer */}
