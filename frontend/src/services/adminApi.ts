@@ -257,6 +257,8 @@ async function readResponse<T>(
   return data as T;
 }
 
+
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -585,6 +587,11 @@ export const adminApi = {
     Promise<AnnotationSessionItem[]> {
     return request<AnnotationSessionItem[]>(
       '/annotation-sessions/',
+    );
+  },
+  getSurveyStats<T = unknown>(): Promise<T> {
+    return request<T>(
+      '/admin/survey-stats',
     );
   },
 

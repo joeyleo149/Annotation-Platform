@@ -20,6 +20,8 @@ import './AdminDashboard.css';
 import { getCurrentUser, logout } from '../services/authService';
 import AddAdminPage from './AddAdminPage';
 import { AddQuestionPage, QuestionsPage } from './QuestionManagementPage';
+import SurveyStatsPage from './SurveyStatsPage';
+import ProfilePage from './ProfilePage';
 
 type DashboardView =
   | 'overview'
@@ -31,7 +33,9 @@ type DashboardView =
   | 'uploads'
   | 'addAdmin'
   | 'addQuestion'
-  | 'questions';
+  | 'questions'
+  | 'surveyStats'
+  | 'profile';
 
 const navigation: {
   id: DashboardView;
@@ -41,14 +45,12 @@ const navigation: {
   { id: 'overview', label: 'Overview', icon: '⌂' },
   { id: 'datasets', label: 'Datasets', icon: '▦' },
   { id: 'videos', label: 'Videos', icon: '▶' },
-  {
-    id: 'archivedVideos',
-    label: 'Archived Videos',
-    icon: '▣',
-  },
+  { id: 'archivedVideos', label: 'Archived Videos', icon: '▣' },
   { id: 'requests', label: 'Requests', icon: '⇄' },
   { id: 'sessions', label: 'Sessions', icon: '◷' },
   { id: 'uploads', label: 'Uploads', icon: '↑' },
+  { id: 'surveyStats', label: 'Survey Statistics', icon: '☷' },
+  { id: 'profile', label: 'Profile', icon: '👤' },
   { id: 'addAdmin', label: 'Add Admin', icon: '+' },
   { id: 'addQuestion', label: 'Add Question', icon: '?' },
   { id: 'questions', label: 'Questions', icon: '≡' },
@@ -154,7 +156,7 @@ export default function AdminDashboard() {
     [datasets, selectedDatasetId],
   );
 
-  const hidesDatasetControls = view === 'addAdmin' || view === 'addQuestion' || view === 'questions';
+const hidesDatasetControls = view === 'addAdmin' || view === 'surveyStats'|| view === 'profile';
 
   const filteredVideos = useMemo(() => {
     const normalizedSearch =
@@ -1241,9 +1243,13 @@ export default function AdminDashboard() {
       case 'addAdmin':
         return <AddAdminPage />;
       case 'addQuestion':
-        return <AddQuestionPage />;
+        return <AddQuestionPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} />;
       case 'questions':
-        return <QuestionsPage />;
+        return <QuestionsPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} />;
+      case 'surveyStats':
+        return <SurveyStatsPage />;
+      case 'profile':
+        return <ProfilePage />;
       default:
         return renderOverview();
     }

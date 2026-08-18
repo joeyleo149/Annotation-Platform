@@ -19,6 +19,7 @@ public sealed class Dataset
 
     // Database relationships
     public ICollection<Video> Videos { get; set; } = [];
+    public ICollection<Question> Questions { get; set; } = [];
 
     public ICollection<AnnotationTaskRequest>
     AnnotationTaskRequests { get; set; } = [];

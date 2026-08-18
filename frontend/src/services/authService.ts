@@ -41,3 +41,22 @@ export function getCurrentUser(): AuthUser | null {
 }
 
 export function homeFor(role: Role) { return role === 'Admin' ? '/admin/upload' : '/annotator/videos'; }
+
+
+export interface UserProfileData {
+  username: string;
+  email: string;
+  gender: string;
+  nationality: string;
+  dateOfBirth: string | null;
+}
+
+export async function fetchProfile(): Promise<UserProfileData> {
+  const response: any = await api.get('/auth/profile');
+  return (response.data ?? response) as UserProfileData;
+}
+
+export async function updateProfile(payload: Partial<UserProfileData> & { password?: string }) {
+  const response: any = await api.patch('/auth/profile', payload);
+  return response.data ?? response;
+}
