@@ -8,6 +8,52 @@ namespace Service.Services;
 public sealed class AnnotationAssignmentService(
     AppDbContext context)
 {
+    public async Task<IReadOnlyList<AvailableDatasetResult>>
+        GetAvailableDatasetsForAnnotatorAsync(
+            int annotatorId,
+            CancellationToken cancellationToken = default)
+    {
+        if (annotatorId <= 0)
+        {
+            throw new ArgumentException(
+                "A valid annotator ID is required.");
+        }
+
+        return await context.Datasets
+            .AsNoTracking()
+            .Where(dataset =>
+                !dataset.IsArchived &&
+                !context.AnnotationSessions.Any(session =>
+                    session.AnnotatorId == annotatorId &&
+                    session.Video.DatasetId == dataset.Id &&
+                    (session.Status ==
+                        AnnotationSessionStatus.Assigned ||
+                     session.Status ==
+                        AnnotationSessionStatus.InProgress)) &&
+                context.Videos.Any(video =>
+                    video.DatasetId == dataset.Id &&
+                    !video.IsArchived &&
+                    video.ProcessingStatus == "Ready" &&
+                    !context.AnnotationSessions.Any(session =>
+                        session.VideoId == video.Id &&
+                        session.AnnotatorId == annotatorId) &&
+                    context.AnnotationSessions.Count(session =>
+                        session.VideoId == video.Id &&
+                        (session.Status ==
+                            AnnotationSessionStatus.Assigned ||
+                         session.Status ==
+                            AnnotationSessionStatus.InProgress ||
+                         session.Status ==
+                            AnnotationSessionStatus.Completed))
+                    < video.RequiredAnnotationCount))
+            .OrderBy(dataset => dataset.Name)
+            .Select(dataset => new AvailableDatasetResult(
+                dataset.Id,
+                dataset.Name,
+                dataset.DatasetType))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<AutomaticTaskRequestResult>
         CreateAndAssignRequestAsync(
             int annotatorId,
@@ -142,6 +188,39 @@ public sealed class AnnotationAssignmentService(
                 $"Dataset '{dataset.Name}' is archived.");
         }
 
+        var hasEligibleVideo = await HasEligibleVideoAsync(
+            annotatorId,
+            datasetId,
+            cancellationToken);
+
+        if (!hasEligibleVideo)
+        {
+            var staleRequests = await context.AnnotationTaskRequests
+                .Where(request =>
+                    request.AnnotatorId == annotatorId &&
+                    request.DatasetId == datasetId &&
+                    request.Status ==
+                        AnnotationTaskRequestStatus.Waiting)
+                .ToListAsync(cancellationToken);
+
+            if (staleRequests.Count > 0)
+            {
+                var cancelledAt = DateTimeOffset.UtcNow;
+
+                foreach (var staleRequest in staleRequests)
+                {
+                    staleRequest.Status =
+                        AnnotationTaskRequestStatus.Cancelled;
+                    staleRequest.CancelledAt = cancelledAt;
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+            }
+
+            throw new TaskRequestConflictException(
+                "No eligible video is currently available for this dataset.");
+        }
+
         var hasActiveAssignment = await context.AnnotationSessions
             .AsNoTracking()
             .AnyAsync(
@@ -173,9 +252,15 @@ public sealed class AnnotationAssignmentService(
 
         if (existingRequest is not null)
         {
-            throw new TaskRequestConflictException(
-                "The annotator already has a waiting " +
-                "request for this dataset.");
+            return new TaskRequestResult(
+                existingRequest.Id,
+                existingRequest.AnnotatorId,
+                existingRequest.DatasetId,
+                existingRequest.Status,
+                existingRequest.RequestedAt,
+                existingRequest.FulfilledAt,
+                existingRequest.CancelledAt,
+                existingRequest.AnnotationSessionId);
         }
 
         var request = new AnnotationTaskRequest
@@ -434,6 +519,32 @@ public sealed class AnnotationAssignmentService(
         return true;
     }
 
+    private Task<bool> HasEligibleVideoAsync(
+        int annotatorId,
+        int datasetId,
+        CancellationToken cancellationToken)
+    {
+        return context.Videos
+            .AsNoTracking()
+            .AnyAsync(video =>
+                video.DatasetId == datasetId &&
+                !video.IsArchived &&
+                video.ProcessingStatus == "Ready" &&
+                !context.AnnotationSessions.Any(session =>
+                    session.VideoId == video.Id &&
+                    session.AnnotatorId == annotatorId) &&
+                context.AnnotationSessions.Count(session =>
+                    session.VideoId == video.Id &&
+                    (session.Status ==
+                        AnnotationSessionStatus.Assigned ||
+                     session.Status ==
+                        AnnotationSessionStatus.InProgress ||
+                     session.Status ==
+                        AnnotationSessionStatus.Completed))
+                < video.RequiredAnnotationCount,
+                cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SessionResult>>
         GetSessionsAsync(
             CancellationToken cancellationToken = default)
@@ -649,6 +760,11 @@ public sealed record TaskRequestResult(
     DateTimeOffset? FulfilledAt,
     DateTimeOffset? CancelledAt,
     int? AnnotationSessionId);
+
+public sealed record AvailableDatasetResult(
+    int Id,
+    string Name,
+    string DatasetType);
 
 public sealed record AutomaticTaskRequestResult(
     TaskRequestResult Request,
