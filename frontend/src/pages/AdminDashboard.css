@@ -299,7 +299,9 @@ button {
 .question-form small { color: var(--admin-muted); font-weight: 400; }
 .question-form .primary-button { width: min(260px, 100%); margin: 0 0 0 auto; }
 .question-list-heading { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid var(--admin-border); }
-.question-list-heading > span { color: var(--admin-blue); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.question-list-heading > span, .question-list-heading-actions > span { color: var(--admin-blue); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.question-list-heading-actions { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.question-list-heading-actions .primary-button { width: auto; }
 .question-list { display: grid; gap: 12px; margin-top: 20px; }
 .question-list article { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px; border: 1px solid var(--admin-border); border-radius: 12px; }
 .question-list article > div { display: grid; gap: 6px; }

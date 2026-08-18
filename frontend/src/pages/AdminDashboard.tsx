@@ -51,7 +51,6 @@ const navigation: {
   { id: 'uploads', label: 'Uploads', icon: '↑' },
   { id: 'surveyStats', label: 'Survey Statistics', icon: '☷' },
   { id: 'addAdmin', label: 'Add Admin', icon: '+' },
-  { id: 'addQuestion', label: 'Add Question', icon: '?' },
   { id: 'questions', label: 'Questions', icon: '≡' },
 ];
 
@@ -1245,9 +1244,9 @@ const hidesDatasetControls = view === 'addAdmin' || view === 'surveyStats'|| vie
       case 'addAdmin':
         return <AddAdminPage />;
       case 'addQuestion':
-        return <AddQuestionPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} />;
+        return <AddQuestionPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} onBack={() => setView('questions')} />;
       case 'questions':
-        return <QuestionsPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} />;
+        return <QuestionsPage selectedDatasetId={selectedDatasetId} selectedDatasetName={selectedDataset?.name ?? null} onAddQuestion={() => setView('addQuestion')} />;
       case 'surveyStats':
         return <SurveyStatsPage />;
       case 'profile':
