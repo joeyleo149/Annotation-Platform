@@ -38,27 +38,39 @@ public sealed class AuthService(
     private const int Iterations = 120_000;
     private const int SaltSize = 16;
     private const int HashSize = 32;
+    private static readonly SemaphoreSlim AccountWriteLock = new(1, 1);
 
     public async Task<PasswordResetUser?> FindUserByEmailAsync(string email, CancellationToken ct)
     {
         var normalized = email.Trim().ToLowerInvariant();
-        var admin = await context.Admins.AsNoTracking().SingleOrDefaultAsync(item => item.Email == normalized, ct);
-        if (admin is not null) return new(admin.Name, admin.Email);
-        var annotator = await context.Annotators.AsNoTracking().SingleOrDefaultAsync(item => item.Email == normalized, ct);
-        return annotator is null ? null : new(annotator.Name, annotator.Email);
+        var admins = await context.Admins.AsNoTracking()
+            .Where(item => item.Email.Trim().ToLower() == normalized)
+            .Select(item => new PasswordResetUser(item.Name, item.Email))
+            .ToListAsync(ct);
+        var annotators = await context.Annotators.AsNoTracking()
+            .Where(item => item.Email.Trim().ToLower() == normalized)
+            .Select(item => new PasswordResetUser(item.Name, item.Email))
+            .ToListAsync(ct);
+
+        var matches = admins.Concat(annotators).ToList();
+        return matches.Count == 1 ? matches[0] : null;
     }
 
     public async Task<bool> ResetPasswordByEmailAsync(string email, string newPassword, CancellationToken ct)
     {
         var normalized = email.Trim().ToLowerInvariant();
-        var admin = await context.Admins.SingleOrDefaultAsync(item => item.Email == normalized, ct);
+        var admin = await context.Admins.SingleOrDefaultAsync(
+            item => item.Email.Trim().ToLower() == normalized, ct);
+        var annotator = await context.Annotators.SingleOrDefaultAsync(
+            item => item.Email.Trim().ToLower() == normalized, ct);
+
+        if (admin is not null && annotator is not null) return false;
         if (admin is not null)
         {
             admin.PasswordHash = HashPassword(newPassword);
             await context.SaveChangesAsync(ct);
             return true;
         }
-        var annotator = await context.Annotators.SingleOrDefaultAsync(item => item.Email == normalized, ct);
         if (annotator is null) return false;
         annotator.PasswordHash = HashPassword(newPassword);
         await context.SaveChangesAsync(ct);
@@ -122,6 +134,9 @@ public sealed class AuthService(
             RegisterUser request,
             CancellationToken ct)
     {
+        await AccountWriteLock.WaitAsync(ct);
+        try
+        {
         var username =
             request.Username.Trim();
 
@@ -150,12 +165,12 @@ public sealed class AuthService(
         var emailExists =
             await context.Admins.AnyAsync(
                 item =>
-                    item.Email == email,
+                    item.Email.Trim().ToLower() == email,
                 ct)
             ||
             await context.Annotators.AnyAsync(
                 item =>
-                    item.Email == email,
+                    item.Email.Trim().ToLower() == email,
                 ct);
 
         if (emailExists)
@@ -183,6 +198,11 @@ public sealed class AuthService(
         await context.SaveChangesAsync(ct);
 
         return RegisterResult.Success;
+        }
+        finally
+        {
+            AccountWriteLock.Release();
+        }
     }
 
     public async Task<CreateAdminResult>
@@ -190,6 +210,9 @@ public sealed class AuthService(
             CreateAdminUser request,
             CancellationToken ct)
     {
+        await AccountWriteLock.WaitAsync(ct);
+        try
+        {
         var username =
             request.Username.Trim();
 
@@ -218,12 +241,12 @@ public sealed class AuthService(
         var emailExists =
             await context.Admins.AnyAsync(
                 item =>
-                    item.Email == email,
+                    item.Email.Trim().ToLower() == email,
                 ct)
             ||
             await context.Annotators.AnyAsync(
                 item =>
-                    item.Email == email,
+                    item.Email.Trim().ToLower() == email,
                 ct);
 
         if (emailExists)
@@ -245,6 +268,11 @@ public sealed class AuthService(
         await context.SaveChangesAsync(ct);
 
         return CreateAdminResult.Success;
+        }
+        finally
+        {
+            AccountWriteLock.Release();
+        }
     }
 
     public async Task DeleteAdminByEmailAsync(
@@ -306,6 +334,9 @@ public sealed class AuthService(
 
     public async Task<UpdateProfileResult> UpdateProfileAsync(int userId, string role, UpdateProfilePayload payload, CancellationToken ct)
     {
+        await AccountWriteLock.WaitAsync(ct);
+        try
+        {
         var newUsername = payload.Username.Trim();
         var newEmail = payload.Email.Trim().ToLowerInvariant();
 
@@ -313,8 +344,8 @@ public sealed class AuthService(
                               await context.Annotators.AnyAsync(a => a.Name == newUsername && (role != "Annotator" || a.Id != userId), ct);
         if (usernameExists) return UpdateProfileResult.DuplicateUsername;
 
-        bool emailExists = await context.Admins.AnyAsync(a => a.Email == newEmail && (role != "Admin" || a.Id != userId), ct) ||
-                            await context.Annotators.AnyAsync(a => a.Email == newEmail && (role != "Annotator" || a.Id != userId), ct);
+        bool emailExists = await context.Admins.AnyAsync(a => a.Email.Trim().ToLower() == newEmail && (role != "Admin" || a.Id != userId), ct) ||
+                            await context.Annotators.AnyAsync(a => a.Email.Trim().ToLower() == newEmail && (role != "Annotator" || a.Id != userId), ct);
         if (emailExists) return UpdateProfileResult.DuplicateEmail;
 
         if (role == "Admin")
@@ -356,6 +387,11 @@ public sealed class AuthService(
 
         await context.SaveChangesAsync(ct);
         return UpdateProfileResult.Success;
+        }
+        finally
+        {
+            AccountWriteLock.Release();
+        }
     }
 
     public static bool IsStrongPassword(
