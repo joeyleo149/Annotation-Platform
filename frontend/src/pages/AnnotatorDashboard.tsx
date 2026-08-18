@@ -53,8 +53,10 @@ export function AnnotatorDashboard() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [requestingIds, setRequestingIds] = useState<number[]>([]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusAssigned, setStatusAssigned] = useState(false);
   const [error, setError] = useState('');
   const [blockedDatasetIds, setBlockedDatasetIds] = useState<Set<number>>(new Set());
+  const [assignedDatasetIds, setAssignedDatasetIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     let ignore = false;
@@ -146,6 +148,7 @@ export function AnnotatorDashboard() {
 
     setRequestingIds(current => [...current, datasetId]);
     setStatusMessage(null);
+    setStatusAssigned(false);
     setError('');
 
     try {
@@ -168,8 +171,16 @@ export function AnnotatorDashboard() {
       );
 
       setBlockedDatasetIds(current => new Set([...current, datasetId]));
+
+      const wasAssigned = automaticResult.assignment.assigned;
+      setStatusAssigned(wasAssigned);
+
+      if (wasAssigned) {
+        setAssignedDatasetIds(current => new Set([...current, datasetId]));
+      }
+
       setStatusMessage(
-        automaticResult.assignment.assigned
+        wasAssigned
           ? `A video from "${datasetName}" was assigned automatically.`
           : `Request received for "${datasetName}". ` +
             'It remains waiting until an eligible video is available.',
@@ -189,15 +200,28 @@ export function AnnotatorDashboard() {
     <div className="max-w-6xl mx-auto space-y-8 py-6">
       <header className="dashboard-view">
         <p className="dashboard-kicker">Annotator workspace</p>
-        <h1>My assigned tasks</h1>
+        <h1>{isVideosView ? 'My annotations' : 'Discover datasets to annotate'}</h1>
         <p>
-          Launch pending work, continue active sessions, or request more annotation work.
+          {isVideosView
+            ? 'Launch pending work and continue your active annotation sessions.'
+            : 'Browse available datasets and request an eligible video to start annotating.'}
         </p>
       </header>
 
       {statusMessage && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           {statusMessage}
+          {statusAssigned && (
+            <>
+              {' '}
+              <Link
+                to="/annotator/videos"
+                className="font-semibold text-emerald-700 underline hover:text-emerald-900"
+              >
+                Go to My Annotations to start annotating →
+              </Link>
+            </>
+          )}
         </div>
       )}
 
@@ -231,9 +255,11 @@ export function AnnotatorDashboard() {
                   >
                     {requestingIds.includes(dataset.id)
                       ? 'Sending request…'
-                      : blockedDatasetIds.has(dataset.id)
-                        ? 'Request locked'
-                        : 'Request a task'}
+                      : assignedDatasetIds.has(dataset.id)
+                        ? 'Assigned!'
+                        : blockedDatasetIds.has(dataset.id)
+                          ? 'Request locked'
+                          : 'Request a task'}
                   </button>
                 </article>
               ))}
