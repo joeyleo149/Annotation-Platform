@@ -14,6 +14,7 @@ export interface QuestionAnswerDto {
   answer: string;
 }
 
+
 export async function getQuestions(
   includeInactive = false,
   datasetId?: number | null,
@@ -83,4 +84,9 @@ export async function submitAnswer(
   );
 
   return response.data as QuestionAnswerDto;
+}
+
+
+export async function updateAnswer(segmentResponseId: number, questionId: number, answer: string) {
+  return (await api.post(`/question-answers/${segmentResponseId}/${questionId}`, { answer })).data as QuestionAnswerDto;
 }
