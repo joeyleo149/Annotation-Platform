@@ -1,5 +1,7 @@
+using System.Security.Claims;
+using Context;
 using Context.Entities;
-using Service;
+using Microsoft.EntityFrameworkCore;
 
 namespace Api.Endpoints;
 
@@ -8,20 +10,9 @@ public static class QuestionEndpoints
     public static RouteGroupBuilder MapQuestionEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/questions").WithTags("Questions");
-
-        // GET ALL
-        group.MapGet("/", async (IEntityService<Question> service, CancellationToken ct) =>
-            Results.Ok((await service.GetAllAsync(ct))
-                .OrderBy(q => q.QuestionNumber)
-                .Select(q => new { q.Id, q.QuestionNumber, q.Text })));
-
-        // ADD POST ENDPOINT
-        group.MapPost("/", async (QuestionRequest r, IEntityService<Question> service, CancellationToken ct) =>
-        {
-            var q = await service.CreateAsync(new Question { QuestionNumber = r.QuestionNumber, Text = r.Text }, ct);
-            return Results.Created($"/api/questions/{q.Id}", new { q.Id, q.QuestionNumber, q.Text });
-        });
-
+        group.MapGet("/", GetQuestionsAsync);
+        group.MapPost("/", CreateQuestionAsync).RequireAuthorization(policy => policy.RequireRole("Admin"));
+        group.MapPatch("/{id:int}/active", SetActiveAsync).RequireAuthorization(policy => policy.RequireRole("Admin"));
         return group;
     }
 

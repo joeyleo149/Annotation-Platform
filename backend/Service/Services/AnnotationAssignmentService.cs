@@ -8,6 +8,99 @@ namespace Service.Services;
 public sealed class AnnotationAssignmentService(
     AppDbContext context)
 {
+    public async Task<AutomaticTaskRequestResult>
+        CreateAndAssignRequestAsync(
+            int annotatorId,
+            int datasetId,
+            int assignmentDurationDays,
+            CancellationToken cancellationToken = default)
+    {
+        var request = await CreateRequestAsync(
+            annotatorId,
+            datasetId,
+            cancellationToken);
+
+        var assignments =
+            await AssignAvailableRequestsForDatasetAsync(
+            datasetId,
+            assignmentDurationDays,
+            cancellationToken);
+
+        var assignment = assignments
+            .FirstOrDefault(outcome =>
+                outcome.RequestId == request.Id)
+            ?? new AssignmentOutcome(
+                false,
+                "No eligible video is currently available. " +
+                "The request remains waiting.",
+                request.Id,
+                request.AnnotatorId,
+                null,
+                null,
+                null);
+
+        return new AutomaticTaskRequestResult(
+            request,
+            assignment);
+    }
+
+    public async Task<IReadOnlyList<AssignmentOutcome>>
+        AssignAvailableRequestsForDatasetAsync(
+            int datasetId,
+            int assignmentDurationDays,
+            CancellationToken cancellationToken = default)
+    {
+        var assignments = new List<AssignmentOutcome>();
+
+        while (true)
+        {
+            var outcome = await AssignNextAsync(
+                datasetId,
+                assignmentDurationDays,
+                cancellationToken);
+
+            if (!outcome.Assigned)
+            {
+                break;
+            }
+
+            assignments.Add(outcome);
+        }
+
+        return assignments;
+    }
+
+    public async Task<WaitingRequestProcessingResult>
+        ProcessWaitingRequestsAsync(
+            int assignmentDurationDays,
+            CancellationToken cancellationToken = default)
+    {
+        var datasetIds = await context.AnnotationTaskRequests
+            .AsNoTracking()
+            .Where(request =>
+                request.Status ==
+                    AnnotationTaskRequestStatus.Waiting)
+            .Select(request => request.DatasetId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var assignments = new List<AssignmentOutcome>();
+
+        foreach (var datasetId in datasetIds)
+        {
+            assignments.AddRange(
+                await AssignAvailableRequestsForDatasetAsync(
+                    datasetId,
+                    assignmentDurationDays,
+                    cancellationToken));
+        }
+
+        return new WaitingRequestProcessingResult(
+            assignments.Count,
+            DateTimeOffset.UtcNow,
+            assignments);
+    }
+
     public async Task<TaskRequestResult>
         CreateRequestAsync(
             int annotatorId,
@@ -434,21 +527,23 @@ public sealed class AnnotationAssignmentService(
                 "Add a transcription before finishing this video.");
         }
 
-        var totalQuestions = await context.Questions
-            .CountAsync(cancellationToken);
+        var activeQuestions = await context.Questions
+            .Where(question => question.IsActive)
+            .Select(question => new { question.Id, question.SegmentNo })
+            .ToListAsync(cancellationToken);
 
-        if (totalQuestions > 0)
+        if (activeQuestions.Count > 0)
         {
             var missingAnswers = session.SegmentResponses
                 .Any(segment =>
                 {
-                    var answeredQuestionNumbers = segment.QuestionAnswers
-                        .Select(answer => answer.QuestionNumber)
+                    var answeredQuestionIds = segment.QuestionAnswers
+                        .Select(answer => answer.QuestionId)
                         .ToHashSet();
 
-                    return Enumerable.Range(1, totalQuestions)
-                        .Any(questionNumber =>
-                            !answeredQuestionNumbers.Contains(questionNumber));
+                    return activeQuestions
+                        .Where(question => question.SegmentNo == segment.SegmentNumber)
+                        .Any(question => !answeredQuestionIds.Contains(question.Id));
                 });
 
             if (missingAnswers)
@@ -555,6 +650,15 @@ public sealed record TaskRequestResult(
     DateTimeOffset? FulfilledAt,
     DateTimeOffset? CancelledAt,
     int? AnnotationSessionId);
+
+public sealed record AutomaticTaskRequestResult(
+    TaskRequestResult Request,
+    AssignmentOutcome Assignment);
+
+public sealed record WaitingRequestProcessingResult(
+    int AssignedSessionCount,
+    DateTimeOffset ProcessedAt,
+    IReadOnlyList<AssignmentOutcome> Assignments);
 
 public sealed record AssignmentOutcome(
     bool Assigned,

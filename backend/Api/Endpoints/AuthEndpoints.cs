@@ -59,6 +59,49 @@ public static partial class AuthEndpoints
             return Results.Ok(new { token = new JwtSecurityTokenHandler().WriteToken(token), userId = user.Id, email = user.Email, role = user.Role });
         });
 
+        group.MapGet("/profile", async (ClaimsPrincipal principal, AuthService auth, CancellationToken ct) =>
+{
+    var userIdClaim = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+    var roleClaim = principal.FindFirstValue(ClaimTypes.Role);
+
+    if (userIdClaim is null || roleClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    var profile = await auth.GetProfileAsync(userId, roleClaim, ct);
+    if (profile is null) return Results.NotFound(new { message = "User account not found." });
+
+    return Results.Ok(profile);
+});
+
+
+
+
+group.MapPatch("/profile", async (ClaimsPrincipal principal, UpdateProfilePayload payload, AuthService auth, CancellationToken ct) =>
+{
+    var userIdClaim = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+    var roleClaim = principal.FindFirstValue(ClaimTypes.Role);
+
+    if (userIdClaim is null || roleClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    if (string.IsNullOrWhiteSpace(payload.Username) || payload.Username.Trim().Length < 3)
+        return Results.BadRequest(new { message = "Username must contain at least 3 characters." });
+    if (string.IsNullOrWhiteSpace(payload.Email))
+        return Results.BadRequest(new { message = "Email is required." });
+    if (!string.IsNullOrWhiteSpace(payload.Password) && !AuthService.IsStrongPassword(payload.Password))
+        return Results.BadRequest(new { message = "New password must be at least 8 characters and include uppercase, lowercase, number, and special characters." });
+
+    var result = await auth.UpdateProfileAsync(userId, roleClaim, payload, ct);
+    return result switch
+    {
+        UpdateProfileResult.UserNotFound => Results.NotFound(new { message = "User account not found." }),
+        UpdateProfileResult.DuplicateUsername => Results.Conflict(new { message = "This Username already exists. Enter a different Username" }),
+        UpdateProfileResult.DuplicateEmail => Results.Conflict(new { message = "This email already exists. Enter a different email." }),
+        _ => Results.Ok(new { message = "Profile updated successfully." })
+    };
+});
+
+
         return group;
     }
 

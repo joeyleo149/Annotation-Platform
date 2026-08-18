@@ -4,6 +4,7 @@ using Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Context.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260817121834_AddQuestionManagement")]
+    partial class AddQuestionManagement
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -342,12 +345,6 @@ namespace Context.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<int?>("DatasetId")
-                        .HasColumnType("int");
-
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -363,7 +360,7 @@ namespace Context.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DatasetId", "SegmentNo", "IsActive");
+                    b.HasIndex("SegmentNo", "IsActive");
 
                     b.ToTable("Questions", t =>
                         {
@@ -599,16 +596,6 @@ namespace Context.Migrations
                     b.Navigation("Annotator");
                 });
 
-            modelBuilder.Entity("Context.Entities.Question", b =>
-                {
-                    b.HasOne("Context.Entities.Dataset", "Dataset")
-                        .WithMany("Questions")
-                        .HasForeignKey("DatasetId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Dataset");
-                });
-
             modelBuilder.Entity("Context.Entities.QuestionAnswer", b =>
                 {
                     b.HasOne("Context.Entities.Question", "Question")
@@ -679,8 +666,6 @@ namespace Context.Migrations
             modelBuilder.Entity("Context.Entities.Dataset", b =>
                 {
                     b.Navigation("AnnotationTaskRequests");
-
-                    b.Navigation("Questions");
 
                     b.Navigation("Videos");
                 });

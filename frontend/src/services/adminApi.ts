@@ -257,6 +257,8 @@ async function readResponse<T>(
   return data as T;
 }
 
+
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -489,17 +491,11 @@ export const adminApi = {
 
   uploadVideos(
     files: File[],
-    uploadedByAdminId: number,
     datasetId: number,
     requiredAnnotationCount: number,
     onProgress?: UploadProgressHandler,
   ): Promise<VideoUploadBatchResponse> {
     const formData = new FormData();
-
-    formData.append(
-      'uploadedByAdminId',
-      uploadedByAdminId.toString(),
-    );
 
     formData.append(
       'datasetId',
@@ -591,6 +587,11 @@ export const adminApi = {
     Promise<AnnotationSessionItem[]> {
     return request<AnnotationSessionItem[]>(
       '/annotation-sessions/',
+    );
+  },
+  getSurveyStats<T = unknown>(): Promise<T> {
+    return request<T>(
+      '/admin/survey-stats',
     );
   },
 

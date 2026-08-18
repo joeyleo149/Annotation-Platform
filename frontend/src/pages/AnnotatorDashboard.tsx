@@ -25,6 +25,14 @@ type TaskRequest = {
   status: string;
 };
 
+type AutomaticRequestResult = {
+  assignment: {
+    assigned: boolean;
+    message: string;
+    annotationSessionId: number | null;
+  };
+};
+
 type VideoSummary = {
   id: number;
   datasetId?: number | null;
@@ -141,13 +149,31 @@ export function AnnotatorDashboard() {
     setError('');
 
     try {
-      await api.post('/annotation-sessions/requests', {
-        annotatorId: user.userId,
+      const requestResponse = await api.post(
+        '/annotation-sessions/requests',
+        {
         datasetId,
-      });
+        },
+      );
+
+      const automaticResult =
+        requestResponse.data as AutomaticRequestResult;
+
+      const sessionResponse = await api.get(
+        '/annotation-sessions/mine',
+      );
+
+      setSessions(
+        (sessionResponse.data as Session[]) ?? [],
+      );
 
       setBlockedDatasetIds(current => new Set([...current, datasetId]));
-      setStatusMessage(`Request sent for "${datasetName}". The admin can approve it from the Requests page.`);
+      setStatusMessage(
+        automaticResult.assignment.assigned
+          ? `A video from "${datasetName}" was assigned automatically.`
+          : `Request received for "${datasetName}". ` +
+            'It remains waiting until an eligible video is available.',
+      );
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -182,7 +208,7 @@ export function AnnotatorDashboard() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-slate-900">Available datasets</h2>
-              <p className="text-sm text-slate-500">Request admin approval for a dataset you want to annotate.</p>
+              <p className="text-sm text-slate-500">Request work and receive an eligible video automatically.</p>
             </div>
           </div>
 
@@ -207,7 +233,7 @@ export function AnnotatorDashboard() {
                       ? 'Sending request…'
                       : blockedDatasetIds.has(dataset.id)
                         ? 'Request locked'
-                        : 'Request to admin'}
+                        : 'Request a task'}
                   </button>
                 </article>
               ))}

@@ -134,6 +134,8 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<ArchiveService>();
 
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<ISurveyStatsService, SurveyStatsService>();
+
 
 builder.Services.AddScoped<
     AdminInvitationEmailSender>();
@@ -207,7 +209,11 @@ app.MapSegmentResponseEndpoints()
 app.MapQuestionAnswerEndpoints()
     .RequireAuthorization();
 
+app.MapQuestionEndpoints()
+    .RequireAuthorization();
 app.MapAuthEndpoints();
+
+app.MapSurveyStatsEndpoints();
 
 app.MapSurveyEndpoints()
     .RequireAuthorization(
@@ -219,7 +225,10 @@ app.MapTranscriptionEndpoints()
         policy =>
             policy.RequireRole("Annotator"));
 
-app.MapUploadEndpoints();
+app.MapUploadEndpoints()
+    .RequireAuthorization(
+        policy =>
+            policy.RequireRole("Admin"));
 app.MapAnnotationExportEndpoints();
 app.MapDatasetEndpoints();
 
