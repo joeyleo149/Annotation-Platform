@@ -13,6 +13,9 @@ import VideoAnnotatorPage from './pages/VideoAnnotatorPage';
 import { AnnotatorDashboard } from './pages/AnnotatorDashboard';
 import { AnnotatorSurveyPage } from './pages/AnnotatorSurveyPage';
 import VerticalNav from './components/VerticalNav';
+import SurveyReminderCard from './components/SurveyReminderCard';
+
+import ProfilePage from './pages/ProfilePage';
 
 import {
   getCurrentUser,
@@ -78,28 +81,14 @@ function AnnotatorProtectedRoute() {
       <main className="dashboard-content">
         <Outlet />
       </main>
+
+      {/* Survey reminder pop-up for annotators */}
+      <SurveyReminderCard />
     </div>
   );
 }
 
-function Placeholder({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="dashboard-view">
-      <p className="dashboard-kicker">
-        Annotate Pro
-      </p>
 
-      <h1>{title}</h1>
-      <p>{description}</p>
-    </section>
-  );
-}
 
 function RootRedirect() {
   const user = getCurrentUser();
@@ -147,6 +136,8 @@ export default function App() {
             }
           />
 
+          <Route path="/admin/profile" element={<ProfilePage />} />
+
           <Route
             path="/admin/upload"
             element={<AdminDashboard />}
@@ -175,15 +166,7 @@ export default function App() {
             element={<AnnotatorDashboard />}
           />
 
-          <Route
-            path="/annotator/profile"
-            element={
-              <Placeholder
-                title="Profile"
-                description="Manage your annotator account."
-              />
-            }
-          />
+          <Route path="/annotator/profile" element={<ProfilePage />} />
 
           <Route
             path="/annotate/:sessionId"
