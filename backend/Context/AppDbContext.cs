@@ -33,8 +33,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.PasswordHash).HasMaxLength(500);
             entity.Property(x => x.Gender).HasMaxLength(50);
             entity.Property(x => x.Nationality).HasMaxLength(100);
+            entity.Property(x => x.IsDeleted).HasDefaultValue(false);
             entity.HasIndex(x => x.Email).IsUnique();
             entity.HasIndex(x => x.Name).IsUnique();
+            entity.HasIndex(x => x.IsDeleted);
         });
         modelBuilder.Entity<Dataset>(entity =>
 {

@@ -167,6 +167,22 @@ group.MapPatch("/profile", async (ClaimsPrincipal principal, UpdateProfilePayloa
     };
 });
 
+        group.MapDelete("/account", async (ClaimsPrincipal principal, AuthService auth, CancellationToken ct) =>
+        {
+            var userIdClaim = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var roleClaim = principal.FindFirstValue(ClaimTypes.Role);
+
+            if (userIdClaim is null || roleClaim is null || !int.TryParse(userIdClaim, out var userId))
+                return Results.Unauthorized();
+
+            var result = await auth.DeleteAccountAsync(userId, roleClaim, ct);
+            return result switch
+            {
+                DeleteAccountResult.UserNotFound => Results.NotFound(new { message = "User account not found." }),
+                _ => Results.Ok(new { message = "Your account was deleted. Your past annotations remain in the system." })
+            };
+        }).RequireAuthorization();
+
 
         return group;
     }

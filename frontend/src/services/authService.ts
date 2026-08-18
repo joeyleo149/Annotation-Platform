@@ -68,3 +68,10 @@ export async function updateProfile(payload: Partial<UserProfileData> & { passwo
   const response: any = await api.patch('/auth/profile', payload);
   return response.data ?? response;
 }
+
+export async function deleteAccount(): Promise<void> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('You are not signed in.');
+  await api.delete('/auth/account');
+  logout();
+}

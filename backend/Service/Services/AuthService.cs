@@ -32,6 +32,12 @@ public enum UpdateProfileResult
     DuplicateEmail
 }
 
+public enum DeleteAccountResult
+{
+    Success,
+    UserNotFound
+}
+
 public sealed class AuthService(
     AppDbContext context)
 {
@@ -110,7 +116,8 @@ public sealed class AuthService(
                 .AsNoTracking()
                 .SingleOrDefaultAsync(
                     item =>
-                        item.Name == normalized,
+                        item.Name == normalized &&
+                        !item.IsDeleted,
                     ct);
 
         if (
@@ -298,6 +305,60 @@ public sealed class AuthService(
         context.Admins.Remove(admin);
 
         await context.SaveChangesAsync(ct);
+    }
+
+    public async Task<DeleteAccountResult> DeleteAccountAsync(int userId, string role, CancellationToken ct)
+    {
+        if (role == "Admin")
+        {
+            var admin = await context.Admins.SingleOrDefaultAsync(item => item.Id == userId, ct);
+            if (admin is null) return DeleteAccountResult.UserNotFound;
+
+            context.Admins.Remove(admin);
+            await context.SaveChangesAsync(ct);
+            return DeleteAccountResult.Success;
+        }
+
+        var annotator = await context.Annotators.SingleOrDefaultAsync(item => item.Id == userId && !item.IsDeleted, ct);
+        if (annotator is null) return DeleteAccountResult.UserNotFound;
+
+        // Soft delete: keep the annotator row (and all their annotations) but
+        // revoke access and anonymize identity so the username/email free up.
+        // The unique indexes on Name/Email stay satisfied because the scrubbed
+        // values are namespaced by the annotator id.
+        annotator.IsDeleted = true;
+        annotator.DeletedAt = DateTimeOffset.UtcNow;
+        annotator.PasswordHash = string.Empty;
+        annotator.Name = $"deleted_user_{annotator.Id}";
+        annotator.Email = $"deleted_user_{annotator.Id}@deleted.local";
+
+        // Stop the annotator from being handed new work: cancel any waiting
+        // requests and release assignments they never completed. Completed
+        // sessions (and their segments/answers) are left untouched.
+        var now = DateTimeOffset.UtcNow;
+
+        var waitingRequests = await context.AnnotationTaskRequests
+            .Where(request => request.AnnotatorId == userId && request.Status == AnnotationTaskRequestStatus.Waiting)
+            .ToListAsync(ct);
+        foreach (var request in waitingRequests)
+        {
+            request.Status = AnnotationTaskRequestStatus.Cancelled;
+            request.CancelledAt = now;
+        }
+
+        var openSessions = await context.AnnotationSessions
+            .Where(session => session.AnnotatorId == userId &&
+                (session.Status == AnnotationSessionStatus.Assigned ||
+                 session.Status == AnnotationSessionStatus.InProgress))
+            .ToListAsync(ct);
+        foreach (var session in openSessions)
+        {
+            session.Status = AnnotationSessionStatus.Cancelled;
+            session.CancelledAt = now;
+        }
+
+        await context.SaveChangesAsync(ct);
+        return DeleteAccountResult.Success;
     }
 
     public async Task<UserProfileResult?> GetProfileAsync(int userId, string role, CancellationToken ct)

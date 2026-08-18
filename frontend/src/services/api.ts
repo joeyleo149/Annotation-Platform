@@ -77,6 +77,12 @@ const api = {
     const response = await fetch(url, { method: 'PATCH', credentials: 'include', headers: headers(), body: body ? JSON.stringify(body) : undefined });
     return { data: await handleResponse(response) };
   },
+
+  delete: async (path: string) => {
+    const url = path.startsWith('/api') ? path : `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    const response = await fetch(url, { method: 'DELETE', credentials: 'include', headers: headers() });
+    return { data: await handleResponse(response) };
+  },
 };
 
 export default api;

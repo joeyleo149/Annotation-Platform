@@ -12,6 +12,14 @@ public sealed class Annotator
 
 
     public bool HasCompletedSurvey { get; set; } = false;
+
+    // Soft-delete: when an annotator deletes their account we keep the row (and
+    // therefore all their annotations, sessions, answers and their appearance in
+    // exports) intact, but revoke access and anonymize the identifying fields so
+    // the original username/email become reusable.
+    public bool IsDeleted { get; set; } = false;
+    public DateTimeOffset? DeletedAt { get; set; }
+
     public AnnotatorSurvey? Survey { get; set; }
     public ICollection<AnnotationSession> AnnotationSessions { get; set; } = [];
     public ICollection<AnnotationTaskRequest>
