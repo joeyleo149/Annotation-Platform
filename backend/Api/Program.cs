@@ -152,8 +152,16 @@ builder.Services.AddScoped<
 builder.Services.AddHostedService<
     AssignmentExpirationWorker>();
 
+//builder.Services.AddHostedService<
+//    DatasetArchiveWorker>();
+
 builder.Services.AddHostedService<
-    DatasetArchiveWorker>();
+    AssignmentExpirationWorker>();
+
+// Disabled because it automatically archives datasets
+// when their currently uploaded videos are completed.
+// builder.Services.AddHostedService<
+//     DatasetArchiveWorker>();
 
 var app = builder.Build();
 
