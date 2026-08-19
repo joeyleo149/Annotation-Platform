@@ -1,0 +1,76 @@
+<mxfile host="app.diagrams.net" version="24.0.0">
+  <diagram id="annotation-erd" name="Annotation Platform ERD">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="admin" value="Admin&#10;──────────&#10;PK  Id : int&#10;Name : string&#10;Email : string&#10;PasswordHash : string" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="dataset" value="Dataset&#10;──────────&#10;PK  Id : int&#10;Name : string&#10;DatasetType : string&#10;ManifestFileName : string&#10;ManifestPath : string&#10;IsArchived : bool&#10;ArchivedAt : DateTimeOffset?&#10;CreatedAt : DateTimeOffset" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="480" y="40" width="240" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="question" value="Question&#10;──────────&#10;PK  Id : int&#10;FK  DatasetId : int?&#10;QuestionText : string&#10;SegmentNo : int&#10;IsActive : bool&#10;CreatedAt : DateTimeOffset" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="960" y="40" width="240" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="annotator" value="Annotator&#10;──────────&#10;PK  Id : int&#10;Name : string&#10;Email : string&#10;PasswordHash : string&#10;DateOfBirth : DateOnly&#10;Gender : string&#10;Nationality : string&#10;HasCompletedSurvey : bool&#10;IsDeleted : bool&#10;DeletedAt : DateTimeOffset?" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="240" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="survey" value="AnnotatorSurvey&#10;──────────&#10;PK  Id : int&#10;FK  AnnotatorId : int&#10;Nationality : string&#10;Gender : string&#10;Age : int&#10;HasDriverLicense : bool&#10;YearsOfDrivingExperience : int&#10;PrimaryDrivingCountry : string&#10;DrivingFrequency : string&#10;HasPriorDatasetAnnotationExperience : bool&#10;HasAccidentsInLastFiveYears : bool&#10;SubmittedAt : DateTime" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="560" width="280" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="taskrequest" value="AnnotationTaskRequest&#10;──────────&#10;PK  Id : int&#10;FK  AnnotatorId : int&#10;FK  DatasetId : int&#10;FK  AnnotationSessionId : int?&#10;Status : string&#10;RequestedAt : DateTimeOffset&#10;FulfilledAt : DateTimeOffset?&#10;CancelledAt : DateTimeOffset?" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="400" y="560" width="260" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="video" value="Video&#10;──────────&#10;PK  Id : int&#10;FK  DatasetId : int?&#10;FK  UploadedByAdminId : int&#10;ScenarioId : string?&#10;FileName : string&#10;StoragePath : string&#10;MimeType : string&#10;FileSizeBytes : long&#10;DurationSeconds : double?&#10;ProcessingStatus : string&#10;RequiredAnnotationCount : int&#10;IsArchived : bool&#10;UploadedAt : DateTimeOffset" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="480" y="300" width="240" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="session" value="AnnotationSession&#10;──────────&#10;PK  Id : int&#10;FK  AnnotatorId : int&#10;FK  VideoId : int&#10;Status : string&#10;AssignedAt : DateTimeOffset&#10;ExpiresAt : DateTimeOffset&#10;StartedAt : DateTimeOffset?&#10;CompletedAt : DateTimeOffset?&#10;CancelledAt : DateTimeOffset?" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="800" y="300" width="240" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="segment" value="SegmentResponse&#10;──────────&#10;PK  Id : int&#10;FK  AnnotationSessionId : int&#10;SegmentNumber : int&#10;StartTime : TimeSpan&#10;EndTime : TimeSpan&#10;Transcript : string&#10;SubmittedAt : DateTimeOffset" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="300" width="240" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="qa" value="QuestionAnswer&#10;──────────&#10;PK/FK  SegmentResponseId : int&#10;PK/FK  QuestionId : int&#10;Answer : string" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="560" width="240" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="1 : N  uploads" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="admin" target="video">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="1 : N  contains" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="dataset" target="video">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="1 : N  defines" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="dataset" target="question">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="1 : N  requested for" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="dataset" target="taskrequest">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="1 : 1  has" style="endArrow=ERone;startArrow=ERone;html=1;" edge="1" parent="1" source="annotator" target="survey">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="1 : N  works on" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="annotator" target="session">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="1 : N  submits" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="annotator" target="taskrequest">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="1 : N  annotated in" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="video" target="session">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="1 : N  produces" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="session" target="segment">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="0 : 1  fulfills" style="endArrow=ERzeroToOne;startArrow=ERzeroToOne;html=1;dashed=1;" edge="1" parent="1" source="taskrequest" target="session">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="1 : N  answered in" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="segment" target="qa">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" value="1 : N  answered by" style="endArrow=ERmany;startArrow=ERone;html=1;" edge="1" parent="1" source="question" target="qa">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -2,17 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies & Microsoft ODBC Driver 18
-# RUN apt-get update && apt-get install -y curl gnupg && \
-#     curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg && \
-#     curl -fsSL https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
-#     apt-get update && \
-#     ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev && \
-#     apt-get clean && rm -rf /var/lib/apt/lists/*
+# System dependencies + Microsoft ODBC Driver 18 (needed by pyodbc for SQL Server)
+RUN apt-get update && apt-get install -y curl gnupg && \
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg && \
+    curl -fsSL https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# COPY requirements.txt ./
-# RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY Scripts ./Scripts
 
-CMD ["python", "Scripts/db_seed.py", "Scripts/speech_to_text.py --video path/to/clip.mp4"]
+# One-shot seeder for local development sample data.
+CMD ["python", "Scripts/db_seed.py"]
