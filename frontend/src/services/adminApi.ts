@@ -1,11 +1,7 @@
 const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL ?? '/api';
 
-const tokenStorageKey = 'annotate_pro_token';
-
-function getToken(): string | null {
-  return localStorage.getItem(tokenStorageKey);
-}
+import { getToken } from './tokenStore';
 
 export type UploadProgressHandler =
   (percentage: number) => void;
