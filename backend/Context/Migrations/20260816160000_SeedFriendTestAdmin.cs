@@ -18,8 +18,8 @@ public sealed class SeedFriendTestAdmin : Migration
             (
                 SELECT 1
                 FROM [Admins]
-                WHERE [Username] = N'FriendAdmin'
-                   OR [Email] = N'friend.admin@example.com'
+                WHERE [Username] = N'Admin'
+                   OR [Email] = N'admin@annotatepro.local'
             )
             BEGIN
                 INSERT INTO [Admins]
@@ -30,9 +30,9 @@ public sealed class SeedFriendTestAdmin : Migration
                 )
                 VALUES
                 (
-                    N'FriendAdmin',
-                    N'friend.admin@example.com',
-                    N'pbkdf2-sha256$120000$R0Oq6VYK0IWEuVpiwTHItQ==$pW2dpbhfLkNVFhndZLQWA9w1427IRysrpXt4h/A4Jn8='
+                    N'Admin',
+                    N'admin@annotatepro.local',
+                    N'pbkdf2-sha256$120000$8uH3dxMLem2bDGv/3K8BzQ==$7T1blYGeVgUCy+TdscWHpRxSuUT/6GGpDZoigaiw/hk='
                 );
             END;
             """);
@@ -44,8 +44,9 @@ public sealed class SeedFriendTestAdmin : Migration
         migrationBuilder.Sql(
             """
             DELETE FROM [Admins]
-            WHERE [Username] = N'FriendAdmin'
-              AND [Email] = N'friend.admin@example.com';
+            WHERE [Username] = N'Admin'
+              AND [Email] =
+                  N'admin@annotatepro.local';
             """);
     }
 }
